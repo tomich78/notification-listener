@@ -12,12 +12,17 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     if (password.length < 6) {
       setError("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+    if (!acceptedTerms) {
+      setError("Tenés que aceptar la política de privacidad para continuar.");
       return;
     }
     setLoading(true);
@@ -87,6 +92,22 @@ export default function RegisterPage() {
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Mínimo 6 caracteres"
               />
+            </div>
+
+            <div className="flex items-start gap-2.5">
+              <input
+                type="checkbox"
+                id="terms"
+                checked={acceptedTerms}
+                onChange={(e) => setAcceptedTerms(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+              />
+              <label htmlFor="terms" className="text-sm text-gray-600 cursor-pointer">
+                Acepto la{" "}
+                <a href="/privacy" target="_blank" className="text-blue-600 hover:underline font-medium">
+                  política de privacidad
+                </a>
+              </label>
             </div>
 
             {error && (
