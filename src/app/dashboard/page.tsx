@@ -33,6 +33,16 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"today" | "all">("today");
 
+  // Sincronizar pagos de MercadoPago al abrir el dashboard
+  useEffect(() => {
+    if (!user) return;
+    user.getIdToken().then((token) => {
+      fetch("/api/cron/mp-sync", {
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {}); // silencioso — no bloquea el dashboard
+    });
+  }, [user]);
+
   useEffect(() => {
     if (!user) return;
 
