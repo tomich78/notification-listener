@@ -24,12 +24,18 @@ export async function GET(req: NextRequest) {
   const snap = await db.collection("devices").get();
 
   const devices = snap.docs
-    .map((d) => ({
-      id: d.id,
-      ...d.data(),
-      createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? null,
-      lastSeen: d.data().lastSeen?.toDate?.()?.toISOString() ?? null,
-    }))
+    .map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        active: data.active as boolean,
+        name: data.name as string,
+        token: data.token as string,
+        userId: data.userId as string,
+        createdAt: data.createdAt?.toDate?.()?.toISOString() ?? null,
+        lastSeen: data.lastSeen?.toDate?.()?.toISOString() ?? null,
+      };
+    })
     .filter((d) => d.active === true)
     .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 

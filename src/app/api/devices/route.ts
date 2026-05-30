@@ -67,6 +67,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "No encontrado" }, { status: 404 });
   }
 
-  await deviceRef.update({ active: false });
+  await deviceRef.delete();
   return NextResponse.json({ ok: true });
 }
