@@ -5,13 +5,14 @@ import { FieldValue } from "firebase-admin/firestore";
 export const dynamic = "force-dynamic";
 
 // POST /api/webhooks/mercadopago
-// MercadoPago llama a este endpoint cada vez que entra un pago.
+// MercadoPago llama a este endpoint cuando entra o se actualiza un pago.
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    console.log("MP webhook received:", JSON.stringify(body));
 
-    // Solo nos interesan los pagos aprobados
-    if (body.type !== "payment" || body.action !== "payment.created") {
+    // Aceptamos payment.created y payment.updated
+    if (body.type !== "payment") {
       return NextResponse.json({ ok: true });
     }
 
@@ -19,7 +20,8 @@ export async function POST(req: NextRequest) {
     const mpUserId  = String(body.user_id);
 
     if (!paymentId || !mpUserId) {
-      return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
+      console.log("MP webhook: missing paymentId or mpUserId");
+      return NextResponse.json({ ok: true });
     }
 
     const db = getAdminDb();
@@ -27,37 +29,52 @@ export async function POST(req: NextRequest) {
     // Buscar la conexión del usuario por mpUserId
     const connSnap = await db.collection("mp_connections").doc(mpUserId).get();
     if (!connSnap.exists) {
-      // No tenemos este usuario conectado — ignoramos
+      console.log("MP webhook: no connection found for mpUserId", mpUserId);
+      // Loguear todas las conexiones para debug
+      const allConns = await db.collection("mp_connections").get();
+      console.log("MP connections in DB:", allConns.docs.map(d => d.id));
       return NextResponse.json({ ok: true });
     }
 
-    const conn = connSnap.data()!;
-    const { userId, accessToken } = conn;
+    const { userId, accessToken } = connSnap.data()!;
 
-    // Obtener los detalles del pago desde la API de MercadoPago
+    // Obtener los detalles del pago
     const paymentRes = await fetch(
       `https://api.mercadopago.com/v1/payments/${paymentId}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
     if (!paymentRes.ok) {
-      console.error("MP payment fetch error:", await paymentRes.text());
-      return NextResponse.json({ ok: true }); // No frenamos — MP reintenta si devolvemos error
+      const errText = await paymentRes.text();
+      console.error("MP payment fetch error:", errText);
+      return NextResponse.json({ ok: true });
     }
 
     const payment = await paymentRes.json();
+    console.log("MP payment status:", payment.status, "amount:", payment.transaction_amount);
 
     // Solo guardar pagos aprobados
     if (payment.status !== "approved") {
       return NextResponse.json({ ok: true });
     }
 
+    // Evitar duplicados: verificar si ya guardamos este pago
+    const existing = await db
+      .collection("notifications")
+      .where("mpPaymentId", "==", String(paymentId))
+      .limit(1)
+      .get();
+
+    if (!existing.empty) {
+      console.log("MP webhook: payment already saved", paymentId);
+      return NextResponse.json({ ok: true });
+    }
+
     const amount      = payment.transaction_amount as number;
-    const description = payment.description || "Pago recibido";
+    const description = (payment.description || "Pago recibido").trim();
     const payerEmail  = payment.payer?.email || "";
     const currency    = payment.currency_id || "ARS";
 
-    // Formatear el texto de la notificación
     const amountFormatted = new Intl.NumberFormat("es-AR", {
       style: "currency",
       currency,
@@ -67,23 +84,24 @@ export async function POST(req: NextRequest) {
       ? `${description} - ${amountFormatted} de ${payerEmail}`
       : `${description} - ${amountFormatted}`;
 
-    // Guardar en Firestore (misma colección que las notificaciones de Android)
     await db.collection("notifications").add({
       userId,
-      deviceId:  null,
-      source:    "mercadopago",
-      app:       "MercadoPago",
+      deviceId:    null,
+      source:      "mercadopago",
+      app:         "MercadoPago",
       text,
       amount,
-      timestamp: payment.date_approved
+      mpPaymentId: String(paymentId),
+      timestamp:   payment.date_approved
         ? new Date(payment.date_approved)
         : FieldValue.serverTimestamp(),
     });
 
+    console.log("MP webhook: saved payment", paymentId, "for user", userId);
     return NextResponse.json({ ok: true });
+
   } catch (err) {
     console.error("MP webhook error:", err);
-    // Devolvemos 200 igual para que MP no reintente indefinidamente
     return NextResponse.json({ ok: true });
   }
 }
