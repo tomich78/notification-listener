@@ -1,65 +1,131 @@
-import Image from "next/image";
+import Link from "next/link";
+import { Bell, Smartphone, Globe, Zap, Shield, ArrowRight } from "lucide-react";
 
-export default function Home() {
+export default function LandingPage() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div className="min-h-screen bg-white">
+      {/* Nav */}
+      <nav className="border-b border-gray-100 px-6 py-4">
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Bell className="w-5 h-5 text-blue-600" />
+            <span className="font-semibold text-gray-900">NotificationListener</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Link href="/login" className="text-sm text-gray-600 hover:text-gray-900">
+              Iniciar sesión
+            </Link>
+            <Link
+              href="/register"
+              className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              Crear cuenta gratis
+            </Link>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      </nav>
+
+      {/* Hero */}
+      <section className="max-w-5xl mx-auto px-6 py-24 text-center">
+        <h1 className="text-5xl font-bold text-gray-900 leading-tight mb-6">
+          Recibí tus cobros<br />en tiempo real
+        </h1>
+        <p className="text-xl text-gray-500 max-w-2xl mx-auto mb-10">
+          Mostrá las transferencias recibidas a tus empleados sin darles acceso
+          a tu cuenta bancaria. Conectá tu celular Android o integrá directamente
+          con MercadoPago, Stripe y más.
+        </p>
+        <div className="flex items-center justify-center gap-4">
+          <Link
+            href="/register"
+            className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            Empezar gratis <ArrowRight className="w-4 h-4" />
+          </Link>
+          <Link
+            href="/login"
+            className="px-6 py-3 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors font-medium text-gray-700"
           >
-            Documentation
-          </a>
+            Ya tengo cuenta
+          </Link>
         </div>
-      </main>
+      </section>
+
+      {/* Cómo funciona */}
+      <section className="bg-gray-50 py-20">
+        <div className="max-w-5xl mx-auto px-6">
+          <h2 className="text-2xl font-bold text-center mb-12">¿Cómo funciona?</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[
+              {
+                step: "1",
+                title: "Creá tu cuenta",
+                desc: "Registrate gratis en menos de un minuto.",
+              },
+              {
+                step: "2",
+                title: "Conectá una fuente",
+                desc: "Instalá la app Android o vinculá MercadoPago con un clic.",
+              },
+              {
+                step: "3",
+                title: "Compartí el link",
+                desc: "Tu equipo ve los cobros en tiempo real desde cualquier dispositivo.",
+              },
+            ].map((item) => (
+              <div key={item.step} className="text-center">
+                <div className="w-10 h-10 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center mx-auto mb-4 text-sm">
+                  {item.step}
+                </div>
+                <h3 className="font-semibold mb-2">{item.title}</h3>
+                <p className="text-gray-500 text-sm">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Features */}
+      <section className="max-w-5xl mx-auto px-6 py-20">
+        <h2 className="text-2xl font-bold text-center mb-12">Todo en un solo lugar</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {[
+            {
+              icon: <Smartphone className="w-5 h-5 text-blue-600" />,
+              title: "App Android",
+              desc: "Escuchá notificaciones de cualquier app bancaria directamente desde tu celular.",
+            },
+            {
+              icon: <Globe className="w-5 h-5 text-blue-600" />,
+              title: "Integraciones web",
+              desc: "Conectá MercadoPago, Stripe, Ualá y más mediante webhooks. Sin celular.",
+            },
+            {
+              icon: <Zap className="w-5 h-5 text-blue-600" />,
+              title: "Tiempo real",
+              desc: "Las notificaciones aparecen al instante. Sin recargar la página.",
+            },
+            {
+              icon: <Shield className="w-5 h-5 text-blue-600" />,
+              title: "Vista segura para empleados",
+              desc: "Compartí un link de solo lectura. Tus empleados ven los cobros, nada más.",
+            },
+          ].map((f) => (
+            <div key={f.title} className="flex gap-4 p-5 rounded-xl border border-gray-100 hover:border-gray-200 transition-colors">
+              <div className="mt-0.5">{f.icon}</div>
+              <div>
+                <h3 className="font-semibold mb-1">{f.title}</h3>
+                <p className="text-sm text-gray-500">{f.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-gray-100 py-8 text-center text-sm text-gray-400">
+        NotificationListener © {new Date().getFullYear()}
+      </footer>
     </div>
   );
 }
