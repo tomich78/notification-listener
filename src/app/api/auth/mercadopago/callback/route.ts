@@ -9,14 +9,14 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const appUrl  = process.env.NEXT_PUBLIC_APP_URL!;
   const code    = req.nextUrl.searchParams.get("code");
-  const uid     = req.nextUrl.searchParams.get("state"); // UID que mandamos en el paso anterior
+  const uid     = req.nextUrl.searchParams.get("state");
 
   if (!code || !uid) {
     return NextResponse.redirect(`${appUrl}/dashboard/settings?mp=error`);
   }
 
   try {
-    // Intercambiar el código por un access_token
+    // 1. Intercambiar el código por un access_token
     const tokenRes = await fetch("https://api.mercadopago.com/oauth/token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -37,9 +37,38 @@ export async function GET(req: NextRequest) {
     const tokenData = await tokenRes.json();
     const { access_token, refresh_token, user_id } = tokenData;
 
+    console.log("MP OAuth success for user_id:", user_id);
+
+    // 2. Registrar el webhook en la cuenta del merchant usando SU access_token.
+    //    Esto permite recibir notificaciones de TODOS sus pagos entrantes,
+    //    no solo los que pasen por nuestro checkout.
+    const webhookUrl = `${appUrl}/api/webhooks/mercadopago`;
+    const webhookRes = await fetch(
+      `https://api.mercadopago.com/v1/users/${user_id}/webhooks`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${access_token}`,
+        },
+        body: JSON.stringify({
+          url:    webhookUrl,
+          events: ["payment"],
+        }),
+      }
+    );
+
+    if (!webhookRes.ok) {
+      const errText = await webhookRes.text();
+      console.warn("MP webhook registration warning:", errText);
+      // No bloqueamos el flujo si falla el registro del webhook
+    } else {
+      console.log("MP webhook registered for user_id:", user_id);
+    }
+
     const db = getAdminDb();
 
-    // Guardar la conexión en una colección separada (lookup rápido por mpUserId en webhooks)
+    // 3. Guardar la conexión
     await db.collection("mp_connections").doc(String(user_id)).set({
       userId:       uid,
       accessToken:  access_token,
@@ -48,10 +77,9 @@ export async function GET(req: NextRequest) {
       connectedAt:  FieldValue.serverTimestamp(),
     });
 
-    // También marcar en el documento del usuario que MP está conectado
     await db.collection("users").doc(uid).update({
-      "mercadopago.connected": true,
-      "mercadopago.mpUserId":  String(user_id),
+      "mercadopago.connected":   true,
+      "mercadopago.mpUserId":    String(user_id),
       "mercadopago.connectedAt": FieldValue.serverTimestamp(),
     });
 
