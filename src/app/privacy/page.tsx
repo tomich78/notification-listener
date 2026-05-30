@@ -70,8 +70,8 @@ export default function PrivacyPage() {
       <h2 style={{ fontSize: 20, fontWeight: 600, marginTop: 32 }}>8. Contact</h2>
       <p>
         If you have questions about this policy, contact:{" "}
-        <a href="mailto:tomidegano@gmail.com" style={{ color: "#2563eb" }}>
-          tomidegano@gmail.com
+        <a href="mailto:tdsdeveloper00@gmail.com" style={{ color: "#2563eb" }}>
+          tdsdeveloper00@gmail.com
         </a>
       </p>
     </main>
