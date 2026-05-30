@@ -1,20 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  collection,
-  getDocs,
-  doc,
-  updateDoc,
-  getDoc,
-  setDoc,
-  orderBy,
-  query,
-} from "firebase/firestore";
+import { useEffect, useState, useCallback } from "react";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
-import { User, Device } from "@/lib/types";
 import { Users, Smartphone, BarChart2, Tag, LogOut } from "lucide-react";
 
 const ADMIN_EMAIL = "tdsdeveloper00@gmail.com";
@@ -35,6 +25,15 @@ const DEFAULT_PLAN_CONFIG: PlanConfig = {
   proPrice: 2500,
 };
 
+async function adminFetch(url: string, token: string, options?: RequestInit) {
+  const res = await fetch(url, {
+    ...options,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...options?.headers },
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  return res.json();
+}
+
 export default function AdminPage() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
@@ -50,7 +49,6 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-gray-900">Panel de Admin</h1>
@@ -65,7 +63,6 @@ export default function AdminPage() {
         </button>
       </div>
 
-      {/* Tabs */}
       <div className="bg-white border-b border-gray-200 px-6">
         <div className="flex gap-1">
           {(
@@ -92,49 +89,34 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="p-6 max-w-5xl mx-auto">
-        {tab === "stats" && <StatsTab />}
-        {tab === "users" && <UsersTab />}
-        {tab === "devices" && <DevicesTab />}
-        {tab === "plans" && <PlansTab />}
+        {tab === "stats"   && <StatsTab   user={user} />}
+        {tab === "users"   && <UsersTab   user={user} />}
+        {tab === "devices" && <DevicesTab user={user} />}
+        {tab === "plans"   && <PlansTab />}
       </div>
     </div>
   );
 }
 
-/* ─── Stats ─────────────────────────────────────────────────── */
-function StatsTab() {
-  const [stats, setStats] = useState({ users: 0, devices: 0, notifications: 0, proUsers: 0 });
-  const [loading, setLoading] = useState(true);
+/* ─── Stats ──────────────────────────────────────────────────── */
+function StatsTab({ user }: { user: { getIdToken: () => Promise<string> } }) {
+  const [stats, setStats] = useState<{ users: number; proUsers: number; devices: number; notifications: number } | null>(null);
 
   useEffect(() => {
-    async function load() {
-      const [usersSnap, devicesSnap, notifsSnap] = await Promise.all([
-        getDocs(collection(db, "users")),
-        getDocs(collection(db, "devices")),
-        getDocs(collection(db, "notifications")),
-      ]);
-      const proUsers = usersSnap.docs.filter((d) => d.data().plan === "pro").length;
-      setStats({
-        users: usersSnap.size,
-        devices: devicesSnap.size,
-        notifications: notifsSnap.size,
-        proUsers,
-      });
-      setLoading(false);
-    }
-    load();
-  }, []);
+    user.getIdToken().then((token) =>
+      adminFetch("/api/admin/stats", token).then(setStats)
+    );
+  }, [user]);
 
-  if (loading) return <Spinner />;
+  if (!stats) return <Spinner />;
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-      <StatCard label="Usuarios totales" value={stats.users} color="bg-blue-50 text-blue-600" />
-      <StatCard label="Usuarios Pro" value={stats.proUsers} color="bg-purple-50 text-purple-600" />
-      <StatCard label="Dispositivos" value={stats.devices} color="bg-green-50 text-green-600" />
-      <StatCard label="Notificaciones" value={stats.notifications} color="bg-orange-50 text-orange-600" />
+      <StatCard label="Usuarios totales" value={stats.users}        color="text-blue-600" />
+      <StatCard label="Usuarios Pro"     value={stats.proUsers}     color="text-purple-600" />
+      <StatCard label="Dispositivos"     value={stats.devices}      color="text-green-600" />
+      <StatCard label="Notificaciones"   value={stats.notifications} color="text-orange-600" />
     </div>
   );
 }
@@ -143,44 +125,46 @@ function StatCard({ label, value, color }: { label: string; value: number; color
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-5">
       <p className="text-xs text-gray-400 mb-1">{label}</p>
-      <p className={`text-3xl font-bold ${color.split(" ")[1]}`}>{value}</p>
+      <p className={`text-3xl font-bold ${color}`}>{value}</p>
     </div>
   );
 }
 
 /* ─── Users ──────────────────────────────────────────────────── */
-function UsersTab() {
-  const [users, setUsers] = useState<(User & { uid: string })[]>([]);
-  const [loading, setLoading] = useState(true);
+interface UserRow { uid: string; displayName: string; email: string; plan: "free" | "pro"; createdAt: string | null }
+
+function UsersTab({ user }: { user: { getIdToken: () => Promise<string> } }) {
+  const [users, setUsers] = useState<UserRow[] | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
 
-  useEffect(() => {
-    getDocs(query(collection(db, "users"), orderBy("createdAt", "desc"))).then((snap) => {
-      setUsers(snap.docs.map((d) => ({ uid: d.id, ...d.data() } as User & { uid: string })));
-      setLoading(false);
-    });
-  }, []);
+  const load = useCallback(() => {
+    user.getIdToken().then((token) =>
+      adminFetch("/api/admin/users", token).then(setUsers)
+    );
+  }, [user]);
+
+  useEffect(() => { load(); }, [load]);
 
   async function togglePlan(uid: string, current: "free" | "pro") {
     setSaving(uid);
     const newPlan = current === "free" ? "pro" : "free";
-    await updateDoc(doc(db, "users", uid), { plan: newPlan });
-    setUsers((prev) => prev.map((u) => (u.uid === uid ? { ...u, plan: newPlan } : u)));
+    const token = await user.getIdToken();
+    await adminFetch("/api/admin/users", token, {
+      method: "PATCH",
+      body: JSON.stringify({ uid, plan: newPlan }),
+    });
+    setUsers((prev) => prev?.map((u) => u.uid === uid ? { ...u, plan: newPlan } : u) ?? null);
     setSaving(null);
   }
 
-  if (loading) return <Spinner />;
+  if (!users) return <Spinner />;
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-100">
-            <Th>Nombre</Th>
-            <Th>Email</Th>
-            <Th>Plan</Th>
-            <Th>Creado</Th>
-            <Th>Acción</Th>
+            <Th>Nombre</Th><Th>Email</Th><Th>Plan</Th><Th>Creado</Th><Th>Acción</Th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
@@ -196,7 +180,7 @@ function UsersTab() {
                 </span>
               </td>
               <td className="px-4 py-3 text-gray-400 text-xs">
-                {u.createdAt?.toDate?.()?.toLocaleDateString("es-AR") ?? "—"}
+                {u.createdAt ? new Date(u.createdAt).toLocaleDateString("es-AR") : "—"}
               </td>
               <td className="px-4 py-3">
                 <button
@@ -216,28 +200,25 @@ function UsersTab() {
 }
 
 /* ─── Devices ────────────────────────────────────────────────── */
-function DevicesTab() {
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [loading, setLoading] = useState(true);
+interface DeviceRow { id: string; name: string; token: string; active: boolean; lastSeen: string | null }
+
+function DevicesTab({ user }: { user: { getIdToken: () => Promise<string> } }) {
+  const [devices, setDevices] = useState<DeviceRow[] | null>(null);
 
   useEffect(() => {
-    getDocs(query(collection(db, "devices"), orderBy("createdAt", "desc"))).then((snap) => {
-      setDevices(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Device)));
-      setLoading(false);
-    });
-  }, []);
+    user.getIdToken().then((token) =>
+      adminFetch("/api/admin/devices", token).then(setDevices)
+    );
+  }, [user]);
 
-  if (loading) return <Spinner />;
+  if (!devices) return <Spinner />;
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-100">
-            <Th>Nombre</Th>
-            <Th>Token</Th>
-            <Th>Estado</Th>
-            <Th>Último heartbeat</Th>
+            <Th>Nombre</Th><Th>Token</Th><Th>Estado</Th><Th>Último heartbeat</Th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
@@ -253,7 +234,7 @@ function DevicesTab() {
                 </span>
               </td>
               <td className="px-4 py-3 text-gray-400 text-xs">
-                {d.lastSeen?.toDate?.()?.toLocaleString("es-AR") ?? "Nunca"}
+                {d.lastSeen ? new Date(d.lastSeen).toLocaleString("es-AR") : "Nunca"}
               </td>
             </tr>
           ))}
@@ -291,29 +272,10 @@ function PlansTab() {
     <div className="max-w-md">
       <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-5">
         <h2 className="font-semibold text-gray-900">Configuración de planes</h2>
-
-        <Field
-          label="Dispositivos máx. (Free)"
-          value={config.freeDeviceLimit}
-          onChange={(v) => setConfig({ ...config, freeDeviceLimit: v })}
-        />
-        <Field
-          label="Dispositivos máx. (Pro)"
-          value={config.proDeviceLimit}
-          onChange={(v) => setConfig({ ...config, proDeviceLimit: v })}
-        />
-        <Field
-          label="Notificaciones/mes (Free)"
-          value={config.freeNotifLimit}
-          onChange={(v) => setConfig({ ...config, freeNotifLimit: v })}
-        />
-        <Field
-          label="Precio Pro (ARS/mes)"
-          value={config.proPrice}
-          onChange={(v) => setConfig({ ...config, proPrice: v })}
-          prefix="$"
-        />
-
+        <Field label="Dispositivos máx. (Free)" value={config.freeDeviceLimit} onChange={(v) => setConfig({ ...config, freeDeviceLimit: v })} />
+        <Field label="Dispositivos máx. (Pro)"  value={config.proDeviceLimit}  onChange={(v) => setConfig({ ...config, proDeviceLimit: v })} />
+        <Field label="Notificaciones/mes (Free)" value={config.freeNotifLimit} onChange={(v) => setConfig({ ...config, freeNotifLimit: v })} />
+        <Field label="Precio Pro (ARS/mes)" value={config.proPrice} onChange={(v) => setConfig({ ...config, proPrice: v })} prefix="$" />
         <button
           onClick={save}
           disabled={saving}
@@ -326,44 +288,20 @@ function PlansTab() {
   );
 }
 
-function Field({
-  label,
-  value,
-  onChange,
-  prefix,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  prefix?: string;
-}) {
+function Field({ label, value, onChange, prefix }: { label: string; value: number; onChange: (v: number) => void; prefix?: string }) {
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
-        {prefix && (
-          <span className="px-3 py-2 bg-gray-50 text-gray-500 text-sm border-r border-gray-200">
-            {prefix}
-          </span>
-        )}
-        <input
-          type="number"
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="w-full px-3 py-2 text-sm focus:outline-none"
-        />
+        {prefix && <span className="px-3 py-2 bg-gray-50 text-gray-500 text-sm border-r border-gray-200">{prefix}</span>}
+        <input type="number" value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full px-3 py-2 text-sm focus:outline-none" />
       </div>
     </div>
   );
 }
 
-/* ─── Helpers ────────────────────────────────────────────────── */
 function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">
-      {children}
-    </th>
-  );
+  return <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">{children}</th>;
 }
 
 function Spinner() {
