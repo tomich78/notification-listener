@@ -15,23 +15,28 @@ async function verifyAdmin(req: NextRequest) {
   }
 }
 
+const DEFAULT = {
+  freeDeviceLimit: 1,
+  proDeviceLimit: 5,
+  freeNotifLimit: 100,
+  proPrice: 2500,
+};
+
 export async function GET(req: NextRequest) {
   if (!(await verifyAdmin(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
   const db = getAdminDb();
-  const snap = await db.collection("devices")
-    .where("active", "==", true)
-    .orderBy("createdAt", "desc")
-    .get();
+  const snap = await db.collection("config").doc("plans").get();
+  return NextResponse.json(snap.exists ? snap.data() : DEFAULT);
+}
 
-  const devices = snap.docs.map((d) => ({
-    id: d.id,
-    ...d.data(),
-    createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? null,
-    lastSeen: d.data().lastSeen?.toDate?.()?.toISOString() ?? null,
-  }));
-
-  return NextResponse.json(devices);
+export async function PUT(req: NextRequest) {
+  if (!(await verifyAdmin(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const body = await req.json();
+  const db = getAdminDb();
+  await db.collection("config").doc("plans").set(body);
+  return NextResponse.json({ ok: true });
 }

@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { Users, Smartphone, BarChart2, Tag, LogOut } from "lucide-react";
@@ -93,7 +91,7 @@ export default function AdminPage() {
         {tab === "stats"   && <StatsTab   user={user} />}
         {tab === "users"   && <UsersTab   user={user} />}
         {tab === "devices" && <DevicesTab user={user} />}
-        {tab === "plans"   && <PlansTab />}
+        {tab === "plans"   && <PlansTab   user={user} />}
       </div>
     </div>
   );
@@ -245,22 +243,25 @@ function DevicesTab({ user }: { user: { getIdToken: () => Promise<string> } }) {
 }
 
 /* ─── Plans ──────────────────────────────────────────────────── */
-function PlansTab() {
+function PlansTab({ user }: { user: { getIdToken: () => Promise<string> } }) {
   const [config, setConfig] = useState<PlanConfig>(DEFAULT_PLAN_CONFIG);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    getDoc(doc(db, "config", "plans")).then((snap) => {
-      if (snap.exists()) setConfig(snap.data() as PlanConfig);
-      setLoading(false);
-    });
-  }, []);
+    user.getIdToken().then((token) =>
+      adminFetch("/api/admin/plans", token).then((data) => {
+        setConfig(data as PlanConfig);
+        setLoading(false);
+      })
+    );
+  }, [user]);
 
   async function save() {
     setSaving(true);
-    await setDoc(doc(db, "config", "plans"), config);
+    const token = await user.getIdToken();
+    await adminFetch("/api/admin/plans", token, { method: "PUT", body: JSON.stringify(config) });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
