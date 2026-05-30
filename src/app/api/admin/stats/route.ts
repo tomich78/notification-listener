@@ -28,11 +28,12 @@ export async function GET(req: NextRequest) {
   ]);
 
   const proUsers = usersSnap.docs.filter((d) => d.data().plan === "pro").length;
+  const activeDevices = devicesSnap.docs.filter((d) => d.data().active === true).length;
 
   return NextResponse.json({
     users: usersSnap.size,
     proUsers,
-    devices: devicesSnap.size,
+    devices: activeDevices,
     notifications: notifsSnap.data().count,
   });
 }

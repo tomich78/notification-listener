@@ -21,17 +21,17 @@ export async function GET(req: NextRequest) {
   }
 
   const db = getAdminDb();
-  const snap = await db.collection("devices")
-    .where("active", "==", true)
-    .orderBy("createdAt", "desc")
-    .get();
+  const snap = await db.collection("devices").get();
 
-  const devices = snap.docs.map((d) => ({
-    id: d.id,
-    ...d.data(),
-    createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? null,
-    lastSeen: d.data().lastSeen?.toDate?.()?.toISOString() ?? null,
-  }));
+  const devices = snap.docs
+    .map((d) => ({
+      id: d.id,
+      ...d.data(),
+      createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? null,
+      lastSeen: d.data().lastSeen?.toDate?.()?.toISOString() ?? null,
+    }))
+    .filter((d) => d.active === true)
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
   return NextResponse.json(devices);
 }
