@@ -17,7 +17,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Notification, BranchConfig } from "@/lib/types";
 import { formatCurrency, formatDateShort, isToday, extractAmount } from "@/lib/utils";
-import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar } from "lucide-react";
+import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar, AlertTriangle } from "lucide-react";
 
 function toLocalDateString(date: Date) {
   return date.toLocaleDateString("en-CA");
@@ -62,6 +62,8 @@ export default function DashboardPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [branchConfig, setBranchConfig] = useState<BranchConfig | null>(null);
+  const [userPlan, setUserPlan] = useState<"free" | "pro">("free");
+  const [notifLimit, setNotifLimit] = useState<number>(100);
   const [filter, setFilter] = useState<"today" | "date" | "all">("today");
   const [selectedDate, setSelectedDate] = useState(toLocalDateString(new Date()));
   const [search, setSearch] = useState("");
@@ -87,6 +89,11 @@ export default function DashboardPage() {
     getDoc(doc(db, "users", user.uid)).then((snap) => {
       const data = snap.data();
       if (data?.branchConfig?.enabled) setBranchConfig(data.branchConfig as BranchConfig);
+      if (data?.plan) setUserPlan(data.plan);
+    });
+    getDoc(doc(db, "config", "plans")).then((snap) => {
+      const limit = snap.data()?.freeNotifLimit;
+      if (limit) setNotifLimit(limit);
     });
   }, [user]);
 
@@ -122,6 +129,16 @@ export default function DashboardPage() {
   const todayTotal = filtered
     .filter((n) => n.amount !== null)
     .reduce((sum, n) => sum + (n.amount ?? 0), 0);
+
+  const monthNotifCount = useMemo(() => {
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    return notifications.filter((n) => {
+      const ts = n.timestamp instanceof Date ? n.timestamp : n.timestamp?.toDate?.();
+      return ts && ts >= startOfMonth;
+    }).length;
+  }, [notifications]);
 
   // — Modal helpers —
   function openAdd() {
@@ -197,6 +214,34 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-sm text-gray-500 mt-1">Tus cobros en tiempo real</p>
       </div>
+
+      {/* Límite free */}
+      {userPlan === "free" && (
+        <div className={`mb-6 rounded-xl border px-4 py-3 flex items-center gap-3 ${monthNotifCount >= notifLimit ? "bg-red-50 border-red-200" : monthNotifCount >= notifLimit * 0.8 ? "bg-yellow-50 border-yellow-200" : "bg-gray-50 border-gray-200"}`}>
+          {monthNotifCount >= notifLimit * 0.8 && (
+            <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${monthNotifCount >= notifLimit ? "text-red-500" : "text-yellow-500"}`} />
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-medium text-gray-700">Notificaciones este mes</span>
+              <span className={`text-xs font-semibold ${monthNotifCount >= notifLimit ? "text-red-600" : "text-gray-600"}`}>
+                {monthNotifCount} / {notifLimit}
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-1.5">
+              <div
+                className={`h-1.5 rounded-full transition-all ${monthNotifCount >= notifLimit ? "bg-red-500" : monthNotifCount >= notifLimit * 0.8 ? "bg-yellow-500" : "bg-blue-500"}`}
+                style={{ width: `${Math.min(100, (monthNotifCount / notifLimit) * 100)}%` }}
+              />
+            </div>
+          </div>
+          {monthNotifCount >= notifLimit * 0.8 && (
+            <a href="/upgrade" className="flex-shrink-0 text-xs font-medium text-blue-600 hover:underline">
+              Mejorar plan →
+            </a>
+          )}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">

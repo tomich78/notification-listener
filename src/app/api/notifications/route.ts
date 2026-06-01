@@ -53,6 +53,36 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, saved: 0 });
   }
 
+  // Validar límite mensual para plan free
+  const userDoc = await db.collection("users").doc(device.userId).get();
+  const userPlan = userDoc.data()?.plan ?? "free";
+
+  if (userPlan === "free") {
+    const plansDoc = await db.collection("config").doc("plans").get();
+    const freeNotifLimit: number = plansDoc.data()?.freeNotifLimit ?? 100;
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const countSnap = await db
+      .collection("notifications")
+      .where("userId", "==", device.userId)
+      .where("timestamp", ">=", startOfMonth)
+      .count()
+      .get();
+
+    const monthCount = countSnap.data().count;
+    if (monthCount >= freeNotifLimit) {
+      return NextResponse.json(
+        { error: "Límite mensual alcanzado", limit: freeNotifLimit, count: monthCount },
+        { status: 429 }
+      );
+    }
+
+    // Limitar el lote para no superar el límite
+    const remaining = freeNotifLimit - monthCount;
+    incoming.splice(remaining);
+  }
+
   // Guardar cada notificación en Firestore (batch write)
   const batch = db.batch();
   for (const n of incoming) {
