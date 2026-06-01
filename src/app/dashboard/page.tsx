@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   collection,
   query,
@@ -17,7 +17,16 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Notification } from "@/lib/types";
 import { formatCurrency, formatDateShort, isToday, extractAmount } from "@/lib/utils";
-import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X } from "lucide-react";
+import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar } from "lucide-react";
+
+function toLocalDateString(date: Date) {
+  return date.toLocaleDateString("en-CA");
+}
+
+function isSameDay(ts: { toDate?: () => Date } | Date, dateStr: string): boolean {
+  const date = ts instanceof Date ? ts : (ts as { toDate: () => Date }).toDate?.() ?? new Date(0);
+  return toLocalDateString(date) === dateStr;
+}
 
 const SOURCE_LABELS: Record<string, string> = {
   android: "Android",
@@ -52,7 +61,9 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"today" | "all">("today");
+  const [filter, setFilter] = useState<"today" | "date" | "all">("today");
+  const [selectedDate, setSelectedDate] = useState(toLocalDateString(new Date()));
+  const [search, setSearch] = useState("");
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -84,10 +95,20 @@ export default function DashboardPage() {
     return unsub;
   }, [user]);
 
-  const filtered =
-    filter === "today"
-      ? notifications.filter((n) => n.timestamp && isToday(n.timestamp))
-      : notifications;
+  const filtered = useMemo(() => {
+    let base = notifications;
+    if (filter === "today") base = notifications.filter((n) => n.timestamp && isToday(n.timestamp));
+    else if (filter === "date") base = notifications.filter((n) => n.timestamp && isSameDay(n.timestamp, selectedDate));
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      base = base.filter((n) =>
+        n.text.toLowerCase().includes(q) ||
+        n.app.toLowerCase().includes(q) ||
+        (n.deviceName ?? "").toLowerCase().includes(q)
+      );
+    }
+    return base;
+  }, [notifications, filter, selectedDate, search]);
 
   const todayTotal = filtered
     .filter((n) => n.amount !== null)
@@ -182,20 +203,48 @@ export default function DashboardPage() {
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-gray-200">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <div className="flex items-center gap-3">
-            <h2 className="font-semibold text-sm text-gray-900">Notificaciones</h2>
-            <button
-              onClick={openAdd}
-              className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Agregar
-            </button>
+        <div className="px-6 py-4 border-b border-gray-100 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h2 className="font-semibold text-sm text-gray-900">Notificaciones</h2>
+              <button
+                onClick={openAdd}
+                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Agregar
+              </button>
+            </div>
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+              <FilterBtn active={filter === "today"} onClick={() => setFilter("today")}>Hoy</FilterBtn>
+              <FilterBtn active={filter === "date"} onClick={() => setFilter("date")}>Fecha</FilterBtn>
+              <FilterBtn active={filter === "all"} onClick={() => setFilter("all")}>Todas</FilterBtn>
+            </div>
           </div>
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-            <FilterBtn active={filter === "today"} onClick={() => setFilter("today")}>Hoy</FilterBtn>
-            <FilterBtn active={filter === "all"} onClick={() => setFilter("all")}>Todas</FilterBtn>
+
+          <div className="flex gap-3">
+            {filter === "date" && (
+              <div className="relative flex-shrink-0">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <input
+                  type="date"
+                  value={selectedDate}
+                  max={toLocalDateString(new Date())}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Buscar notificaciones..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
         </div>
 
