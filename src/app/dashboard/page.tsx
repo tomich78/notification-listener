@@ -37,9 +37,16 @@ interface NotifForm {
   text: string;
   app: string;
   amount: string;
+  datetime: string;
 }
 
-const EMPTY_FORM: NotifForm = { text: "", app: "", amount: "" };
+function nowLocalDatetime() {
+  const now = new Date();
+  now.setSeconds(0, 0);
+  return now.toISOString().slice(0, 16); // YYYY-MM-DDTHH:mm
+}
+
+const EMPTY_FORM: NotifForm = { text: "", app: "", amount: "", datetime: nowLocalDatetime() };
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -95,10 +102,14 @@ export default function DashboardPage() {
 
   function openEdit(n: Notification) {
     setEditing(n);
+    const date = n.timestamp instanceof Date ? n.timestamp : n.timestamp?.toDate?.() ?? new Date();
+    const datetimeStr = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+      .toISOString().slice(0, 16);
     setForm({
       text: n.text,
       app: n.app,
       amount: n.amount !== null ? String(n.amount) : "",
+      datetime: datetimeStr,
     });
     setModalOpen(true);
   }
@@ -117,11 +128,14 @@ export default function DashboardPage() {
       ? parseFloat(form.amount.replace(",", ".")) || extractAmount(form.amount)
       : null;
 
+    const timestamp = form.datetime ? new Date(form.datetime) : new Date();
+
     if (editing) {
       await updateDoc(doc(db, "notifications", editing.id), {
         text: form.text.trim(),
         app: form.app.trim() || "Manual",
         amount: isNaN(amount as number) ? null : amount,
+        timestamp,
       });
     } else {
       await addDoc(collection(db, "notifications"), {
@@ -132,7 +146,7 @@ export default function DashboardPage() {
         text: form.text.trim(),
         app: form.app.trim() || "Manual",
         amount: isNaN(amount as number) ? null : amount,
-        timestamp: serverTimestamp(),
+        timestamp,
       });
     }
 
@@ -278,6 +292,15 @@ export default function DashboardPage() {
                   onChange={(e) => setForm({ ...form, app: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Ej: MercadoPago"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Fecha y hora</label>
+                <input
+                  type="datetime-local"
+                  value={form.datetime}
+                  onChange={(e) => setForm({ ...form, datetime: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
