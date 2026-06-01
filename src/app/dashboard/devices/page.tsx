@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, query, where, onSnapshot, Timestamp } from "firebase/firestore";
+import { collection, query, where, onSnapshot, Timestamp, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Device } from "@/lib/types";
-import { Smartphone, Plus, Trash2, Wifi, WifiOff, X } from "lucide-react";
+import { Smartphone, Plus, Trash2, Wifi, WifiOff, X, Crown } from "lucide-react";
 import QRCode from "react-qr-code";
+
+interface PlanConfig { freeDeviceLimit: number; proDeviceLimit: number }
+const DEFAULT_CONFIG: PlanConfig = { freeDeviceLimit: 1, proDeviceLimit: 5 };
 
 export default function DevicesPage() {
   const { user } = useAuth();
@@ -15,9 +18,18 @@ export default function DevicesPage() {
   const [adding, setAdding] = useState(false);
   const [newDeviceName, setNewDeviceName] = useState("");
   const [qrData, setQrData] = useState<{ name: string; payload: string } | null>(null);
+  const [userPlan, setUserPlan] = useState<"free" | "pro">("free");
+  const [planConfig, setPlanConfig] = useState<PlanConfig>(DEFAULT_CONFIG);
 
   useEffect(() => {
     if (!user) return;
+    Promise.all([
+      getDoc(doc(db, "users", user.uid)),
+      getDoc(doc(db, "config", "plans")),
+    ]).then(([userSnap, configSnap]) => {
+      if (userSnap.exists()) setUserPlan(userSnap.data().plan ?? "free");
+      if (configSnap.exists()) setPlanConfig(configSnap.data() as PlanConfig);
+    });
     const q = query(
       collection(db, "devices"),
       where("userId", "==", user.uid),
@@ -28,6 +40,9 @@ export default function DevicesPage() {
       setLoading(false);
     });
   }, [user]);
+
+  const deviceLimit = userPlan === "pro" ? planConfig.proDeviceLimit : planConfig.freeDeviceLimit;
+  const atLimit = devices.length >= deviceLimit;
 
   async function addDevice() {
     if (!user || !newDeviceName.trim()) return;
@@ -69,31 +84,52 @@ export default function DevicesPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Dispositivos</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Administrá los celulares Android conectados a tu cuenta.
+          Administrá los celulares Android conectados a tu cuenta.{" "}
+          <span className="text-gray-400">({devices.length}/{deviceLimit} usados)</span>
         </p>
       </div>
 
       {/* Agregar dispositivo */}
       <div className="bg-white rounded-2xl border border-gray-200 p-5 mb-6">
         <h2 className="font-semibold text-sm mb-4">Agregar dispositivo</h2>
-        <div className="flex gap-3">
-          <input
-            type="text"
-            value={newDeviceName}
-            onChange={(e) => setNewDeviceName(e.target.value)}
-            placeholder="Ej: Celular del local"
-            className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            onKeyDown={(e) => e.key === "Enter" && addDevice()}
-          />
-          <button
-            onClick={addDevice}
-            disabled={adding || !newDeviceName.trim()}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-          >
-            <Plus className="w-4 h-4" />
-            {adding ? "Creando..." : "Agregar"}
-          </button>
-        </div>
+        {atLimit ? (
+          <div className="flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-xl">
+            <div>
+              <p className="text-sm font-medium text-amber-800">Límite de dispositivos alcanzado</p>
+              <p className="text-xs text-amber-600 mt-0.5">
+                Tu plan {userPlan === "free" ? "Free" : "Pro"} permite hasta {deviceLimit} dispositivo{deviceLimit > 1 ? "s" : ""}.
+              </p>
+            </div>
+            {userPlan === "free" && (
+              <a
+                href="/upgrade"
+                className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors flex-shrink-0 ml-4"
+              >
+                <Crown className="w-3.5 h-3.5" />
+                Mejorar plan
+              </a>
+            )}
+          </div>
+        ) : (
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={newDeviceName}
+              onChange={(e) => setNewDeviceName(e.target.value)}
+              placeholder="Ej: Celular del local"
+              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onKeyDown={(e) => e.key === "Enter" && addDevice()}
+            />
+            <button
+              onClick={addDevice}
+              disabled={adding || !newDeviceName.trim()}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              <Plus className="w-4 h-4" />
+              {adding ? "Creando..." : "Agregar"}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Modal QR */}
