@@ -84,10 +84,16 @@ export default function SettingsPage() {
   async function saveBranchConfig() {
     if (!user) return;
     setSavingBranch(true);
-    await updateDoc(doc(db, "users", user.uid), { branchConfig });
-    setSavingBranch(false);
-    setSavedBranch(true);
-    setTimeout(() => setSavedBranch(false), 2000);
+    try {
+      await updateDoc(doc(db, "users", user.uid), { branchConfig });
+      setSavedBranch(true);
+      setTimeout(() => setSavedBranch(false), 2000);
+    } catch (e) {
+      console.error("Error guardando sucursales:", e);
+      alert("Error al guardar. Intentá de nuevo.");
+    } finally {
+      setSavingBranch(false);
+    }
   }
 
   function copyLink() {
@@ -192,23 +198,40 @@ export default function SettingsPage() {
           <div className="flex items-center gap-2">
             <GitBranch className="w-4 h-4 text-blue-600" />
             <h2 className="font-semibold text-sm text-gray-900">Modo sucursales</h2>
+            {!isPro && (
+              <span className="flex items-center gap-1 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">
+                <Crown className="w-3 h-3" />
+                Pro
+              </span>
+            )}
           </div>
-          <button
-            onClick={() => setBranchConfig(prev => ({ ...prev, enabled: !prev.enabled }))}
-            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-              branchConfig.enabled ? "bg-blue-600" : "bg-gray-200"
-            }`}
-          >
-            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-              branchConfig.enabled ? "translate-x-4" : "translate-x-1"
-            }`} />
-          </button>
+          {isPro && (
+            <button
+              onClick={() => setBranchConfig(prev => ({ ...prev, enabled: !prev.enabled }))}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                branchConfig.enabled ? "bg-blue-600" : "bg-gray-200"
+              }`}
+            >
+              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                branchConfig.enabled ? "translate-x-4" : "translate-x-1"
+              }`} />
+            </button>
+          )}
         </div>
         <p className="text-xs text-gray-400 mb-4">
           Permitir que cada sucursal marque qué transferencias le pertenecen.
         </p>
 
-        {branchConfig.enabled && (
+        {!isPro && (
+          <div className="flex items-center justify-between p-3 bg-purple-50 rounded-xl">
+            <p className="text-xs text-purple-700">Disponible en el plan Pro</p>
+            <a href="/upgrade" className="text-xs font-medium text-purple-700 hover:underline">
+              Mejorar plan →
+            </a>
+          </div>
+        )}
+
+        {isPro && branchConfig.enabled && (
           <div className="space-y-4">
             {/* Contraseña */}
             <div>
@@ -272,7 +295,7 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {!branchConfig.enabled && branchConfig.branches.length > 0 && (
+        {isPro && !branchConfig.enabled && branchConfig.branches.length > 0 && (
           <button
             onClick={saveBranchConfig}
             disabled={savingBranch}
