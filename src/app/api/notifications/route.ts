@@ -62,13 +62,14 @@ export async function POST(req: NextRequest) {
 
     const ref = db.collection("notifications").doc();
     batch.set(ref, {
-      userId:    device.userId,
-      deviceId:  deviceDoc.id,
-      source:    "android",
+      userId:     device.userId,
+      deviceId:   deviceDoc.id,
+      deviceName: device.name ?? null,
+      source:     "android",
       app,
       text,
-      amount:    extractAmount(text),
-      timestamp: n.timestamp
+      amount:     extractAmount(text),
+      timestamp:  n.timestamp
         ? new Date(n.timestamp)
         : FieldValue.serverTimestamp(),
     });

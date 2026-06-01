@@ -23,6 +23,7 @@ export interface Notification {
   id: string;
   userId: string;
   deviceId: string | null;
+  deviceName: string | null;
   source: "android" | "mercadopago" | "webhook";
   app: string;
   text: string;

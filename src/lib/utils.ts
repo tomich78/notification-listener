@@ -29,23 +29,47 @@ export function formatDateShort(timestamp: Timestamp | Date): string {
 }
 
 // Intenta extraer un monto en pesos argentinos del texto de una notificación.
-// Soporta formatos: $1.500,00 / $ 1500 / $1500.50
+// Soporta formatos con y sin $:
+//   $1.500,00 | $1.500 | $ 1500 | 1.500,00 pesos | 1500 pesos | $1,500.00
 export function extractAmount(text: string): number | null {
-  const patterns = [
-    /\$\s*([\d.]+),(\d{2})/,   // $1.500,00
-    /\$\s*([\d,]+)\.(\d{2})/,  // $1,500.00
-    /\$\s*([\d.]+)/,            // $1.500
+  // Patrones ordenados de más específico a más genérico
+  const patterns: { re: RegExp; parse: (m: RegExpMatchArray) => number }[] = [
+    // $1.500,85 o 1.500,85 (AR: punto=miles, coma=decimal)
+    {
+      re: /\$?\s*([\d]{1,3}(?:\.[\d]{3})+),(\d{1,2})/,
+      parse: (m) => parseFloat(m[1].replace(/\./g, "") + "." + m[2]),
+    },
+    // $1.500 o 1.500 (AR: punto=miles, sin decimal)
+    {
+      re: /\$?\s*([\d]{1,3}(?:\.[\d]{3})+)/,
+      parse: (m) => parseFloat(m[1].replace(/\./g, "")),
+    },
+    // $1,500.85 (US: coma=miles, punto=decimal)
+    {
+      re: /\$?\s*([\d]{1,3}(?:,[\d]{3})+)\.(\d{1,2})/,
+      parse: (m) => parseFloat(m[1].replace(/,/g, "") + "." + m[2]),
+    },
+    // $1500,85 (sin separador de miles, coma=decimal)
+    {
+      re: /\$?\s*(\d+),(\d{2})\b/,
+      parse: (m) => parseFloat(m[1] + "." + m[2]),
+    },
+    // $1500.85 (sin separador de miles, punto=decimal)
+    {
+      re: /\$?\s*(\d+)\.(\d{2})\b/,
+      parse: (m) => parseFloat(m[1] + "." + m[2]),
+    },
+    // $1500 (número entero)
+    {
+      re: /\$\s*(\d+)/,
+      parse: (m) => parseFloat(m[1]),
+    },
   ];
 
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
+  for (const { re, parse } of patterns) {
+    const match = text.match(re);
     if (match) {
-      const cleaned = match[0]
-        .replace(/\$/g, "")
-        .replace(/\s/g, "")
-        .replace(/\./g, "")
-        .replace(",", ".");
-      const value = parseFloat(cleaned);
+      const value = parse(match);
       if (!isNaN(value) && value > 0) return value;
     }
   }

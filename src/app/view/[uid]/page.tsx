@@ -90,7 +90,9 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm text-gray-700 truncate">{n.text}</p>
-                      <p className="text-xs text-gray-400">{n.app}</p>
+                      <p className="text-xs text-gray-400">
+                        {n.app}{n.deviceName ? ` · ${n.deviceName}` : ""}
+                      </p>
                     </div>
                   </div>
                   <div className="flex-shrink-0 text-right ml-4">
