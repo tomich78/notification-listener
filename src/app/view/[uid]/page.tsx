@@ -70,6 +70,10 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
     }
   }
 
+  function enterReadOnly() {
+    setActiveBranch("__readonly__");
+  }
+
   async function assignBranch(notifId: string, branchId: string | null) {
     setAssigning(notifId);
     setDropdownOpen(null);
@@ -101,7 +105,8 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
   const unassigned = filtered.filter((n) => !n.branchId);
   const unassignedTotal = unassigned.reduce((s, n) => s + (n.amount ?? 0), 0);
   const isToday = selectedDate === toLocalDateString(new Date());
-  const branchMode = branchConfig?.enabled && activeBranch && activeBranch !== "__selecting__";
+  const branchMode = branchConfig?.enabled && activeBranch && activeBranch !== "__selecting__" && activeBranch !== "__readonly__";
+  const readOnly = activeBranch === "__readonly__";
 
   // — Pantalla de contraseña —
   if (branchConfig?.enabled && !activeBranch) {
@@ -132,6 +137,14 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
               Entrar
             </button>
           </form>
+          <div className="mt-4 pt-4 border-t border-gray-100 text-center">
+            <button
+              onClick={enterReadOnly}
+              className="text-sm text-gray-400 hover:text-gray-600 hover:underline"
+            >
+              Solo ver, sin marcar →
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -181,7 +194,9 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
                 {currentBranch.name}
               </div>
             )}
-            {!branchMode && <span className="text-xs text-gray-400">Solo lectura</span>}
+            {(readOnly || !branchMode) && (
+              <span className="text-xs text-gray-400">Solo lectura</span>
+            )}
           </div>
         </div>
       </div>
@@ -189,16 +204,16 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
       <div className="max-w-3xl mx-auto px-6 py-8 space-y-4">
 
         {/* Totales */}
-        <div className={`grid gap-3 ${branchMode ? "grid-cols-2 sm:grid-cols-3" : ""}`}>
+        <div className={`grid gap-3 ${(branchMode || readOnly) ? "grid-cols-2 sm:grid-cols-3" : ""}`}>
           {/* Total global */}
-          <div className={`bg-white rounded-2xl border border-gray-200 p-5 text-center ${!branchMode ? "col-span-full" : ""}`}>
+          <div className={`bg-white rounded-2xl border border-gray-200 p-5 text-center ${!(branchMode || readOnly) ? "col-span-full" : ""}`}>
             <p className="text-xs text-gray-400 mb-1 uppercase tracking-wide">Total global</p>
             <p className="text-3xl font-bold text-gray-900">{formatCurrency(total)}</p>
             <p className="text-xs text-gray-400 mt-1">{filtered.length} cobros</p>
           </div>
 
           {/* Sin asignar */}
-          {branchMode && (
+          {(branchMode || readOnly) && (
             <div className="bg-white rounded-2xl border border-gray-200 p-5 text-center">
               <p className="text-xs text-gray-400 mb-1 uppercase tracking-wide">Sin asignar</p>
               <p className="text-2xl font-bold text-gray-500">{formatCurrency(unassignedTotal)}</p>
@@ -207,7 +222,7 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
           )}
 
           {/* Por sucursal */}
-          {branchMode && branchConfig!.branches.map((b) => {
+          {(branchMode || readOnly) && branchConfig!.branches.map((b) => {
             const bNotifs = filtered.filter(n => n.branchId === b.id);
             const bTotal = bNotifs.reduce((s, n) => s + (n.amount ?? 0), 0);
             return (
