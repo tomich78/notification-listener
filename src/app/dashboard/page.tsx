@@ -11,11 +11,11 @@ import {
   updateDoc,
   deleteDoc,
   doc,
-  serverTimestamp,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
-import { Notification } from "@/lib/types";
+import { Notification, BranchConfig } from "@/lib/types";
 import { formatCurrency, formatDateShort, isToday, extractAmount } from "@/lib/utils";
 import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar } from "lucide-react";
 
@@ -61,6 +61,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [branchConfig, setBranchConfig] = useState<BranchConfig | null>(null);
   const [filter, setFilter] = useState<"today" | "date" | "all">("today");
   const [selectedDate, setSelectedDate] = useState(toLocalDateString(new Date()));
   const [search, setSearch] = useState("");
@@ -78,6 +79,14 @@ export default function DashboardPage() {
       fetch("/api/cron/mp-sync", {
         headers: { Authorization: `Bearer ${token}` },
       }).catch(() => {});
+    });
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    getDoc(doc(db, "users", user.uid)).then((snap) => {
+      const data = snap.data();
+      if (data?.branchConfig?.enabled) setBranchConfig(data.branchConfig as BranchConfig);
     });
   }, [user]);
 
@@ -264,6 +273,7 @@ export default function DashboardPage() {
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Notificación</th>
                   <th className="text-right px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Monto</th>
                   <th className="text-right px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Hora</th>
+                  {branchConfig && <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Sucursal</th>}
                   <th className="px-6 py-3" />
                 </tr>
               </thead>
@@ -284,6 +294,23 @@ export default function DashboardPage() {
                     <td className="px-6 py-3 text-right text-gray-400">
                       {n.timestamp ? formatDateShort(n.timestamp) : "—"}
                     </td>
+                    {branchConfig && (
+                      <td className="px-6 py-3">
+                        {(() => {
+                          const branch = branchConfig.branches.find((b) => b.id === n.branchId);
+                          return branch ? (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-white"
+                              style={{ backgroundColor: branch.color }}
+                            >
+                              {branch.name}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          );
+                        })()}
+                      </td>
+                    )}
                     <td className="px-6 py-3">
                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
