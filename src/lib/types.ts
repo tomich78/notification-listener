@@ -24,11 +24,18 @@ export interface Notification {
   userId: string;
   deviceId: string | null;
   deviceName: string | null;
-  source: "android" | "mercadopago" | "webhook";
+  source: "android" | "mercadopago" | "webhook" | "manual";
   app: string;
   text: string;
   amount: number | null;
   timestamp: Timestamp;
+  branchId: string | null;
+}
+
+export interface BranchConfig {
+  enabled: boolean;
+  password: string;
+  branches: { id: string; name: string; color: string }[];
 }
 
 export interface WebhookSource {
