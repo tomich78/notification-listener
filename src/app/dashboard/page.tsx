@@ -12,12 +12,15 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
+  limit,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Notification, BranchConfig } from "@/lib/types";
 import { formatCurrency, formatDateShort, isToday, extractAmount } from "@/lib/utils";
 import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar, AlertTriangle } from "lucide-react";
+import OnboardingWizard from "@/components/OnboardingWizard";
 
 function toLocalDateString(date: Date) {
   return date.toLocaleDateString("en-CA");
@@ -64,6 +67,7 @@ export default function DashboardPage() {
   const [branchConfig, setBranchConfig] = useState<BranchConfig | null>(null);
   const [userPlan, setUserPlan] = useState<"free" | "pro">("free");
   const [notifLimit, setNotifLimit] = useState<number>(100);
+  const [showWizard, setShowWizard] = useState(false);
   const [filter, setFilter] = useState<"today" | "date" | "all">("today");
   const [selectedDate, setSelectedDate] = useState(toLocalDateString(new Date()));
   const [search, setSearch] = useState("");
@@ -95,6 +99,14 @@ export default function DashboardPage() {
       const limit = snap.data()?.freeNotifLimit;
       if (limit) setNotifLimit(limit);
     });
+    // Verificar si debe mostrar el wizard
+    const done = localStorage.getItem(`nlistener_onboarding_done_${user.uid}`);
+    if (!done) {
+      getDocs(query(collection(db, "devices"), where("userId", "==", user.uid), where("active", "==", true), limit(1)))
+        .then((snap) => {
+          if (snap.size === 0) setShowWizard(true);
+        });
+    }
   }, [user]);
 
   useEffect(() => {
@@ -380,6 +392,11 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Onboarding wizard */}
+      {showWizard && (
+        <OnboardingWizard onDone={() => setShowWizard(false)} />
+      )}
 
       {/* Modal */}
       {modalOpen && (
