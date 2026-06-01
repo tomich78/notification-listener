@@ -28,6 +28,7 @@ export default function UpgradePage() {
   const [planConfig, setPlanConfig] = useState<PlanConfig>(DEFAULT_CONFIG);
   const [userPlan, setUserPlan] = useState<"free" | "pro">("free");
   const [loading, setLoading] = useState(true);
+  const [subscribing, setSubscribing] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -104,11 +105,36 @@ export default function UpgradePage() {
           </ul>
 
           <button
-            onClick={() => alert("Próximamente — integración con MercadoPago")}
-            className="w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+            onClick={async () => {
+              if (!user) return;
+              setSubscribing(true);
+              try {
+                const token = await user.getIdToken();
+                const res = await fetch("/api/mp/subscribe", {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                const data = await res.json();
+                if (data.init_point) {
+                  window.location.href = data.init_point;
+                } else {
+                  alert("Error al iniciar el pago. Intentá de nuevo.");
+                }
+              } catch {
+                alert("Error al conectar con MercadoPago.");
+              } finally {
+                setSubscribing(false);
+              }
+            }}
+            disabled={subscribing}
+            className="w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            <Crown className="w-4 h-4" />
-            Suscribirme ahora
+            {subscribing ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Crown className="w-4 h-4" />
+            )}
+            {subscribing ? "Redirigiendo a MercadoPago..." : "Suscribirme ahora"}
           </button>
         </div>
 
