@@ -6,6 +6,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Crown, Check, ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 interface PlanConfig {
   freeDeviceLimit: number;
@@ -22,13 +23,15 @@ const DEFAULT_CONFIG: PlanConfig = {
 };
 
 export default function UpgradePage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [planConfig, setPlanConfig] = useState<PlanConfig>(DEFAULT_CONFIG);
   const [userPlan, setUserPlan] = useState<"free" | "pro">("free");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (authLoading) return;
+    if (!user) { router.push("/login"); return; }
     Promise.all([
       getDoc(doc(db, "users", user.uid)),
       getDoc(doc(db, "config", "plans")),
@@ -37,7 +40,7 @@ export default function UpgradePage() {
       if (configSnap.exists()) setPlanConfig(configSnap.data() as PlanConfig);
       setLoading(false);
     });
-  }, [user]);
+  }, [user, authLoading, router]);
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
