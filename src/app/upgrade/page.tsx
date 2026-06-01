@@ -38,6 +38,9 @@ export default function UpgradePage() {
     ]).then(([userSnap, configSnap]) => {
       if (userSnap.exists()) setUserPlan(userSnap.data().plan ?? "free");
       if (configSnap.exists()) setPlanConfig(configSnap.data() as PlanConfig);
+    }).catch(() => {
+      // Si falla Firestore usamos los defaults
+    }).finally(() => {
       setLoading(false);
     });
   }, [user, authLoading, router]);

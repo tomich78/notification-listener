@@ -29,7 +29,7 @@ export default function DevicesPage() {
     ]).then(([userSnap, configSnap]) => {
       if (userSnap.exists()) setUserPlan(userSnap.data().plan ?? "free");
       if (configSnap.exists()) setPlanConfig(configSnap.data() as PlanConfig);
-    });
+    }).catch(() => {});
     const q = query(
       collection(db, "devices"),
       where("userId", "==", user.uid),

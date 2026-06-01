@@ -37,8 +37,7 @@ export default function SettingsPage() {
     ]).then(([userSnap, configSnap]) => {
       if (userSnap.exists()) setUserPlan(userSnap.data().plan ?? "free");
       if (configSnap.exists()) setPlanConfig(configSnap.data() as PlanConfig);
-      setLoadingPlan(false);
-    });
+    }).catch(() => {}).finally(() => setLoadingPlan(false));
   }, [user]);
 
   function copyLink() {
