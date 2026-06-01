@@ -1,7 +1,18 @@
 import Link from "next/link";
 import { Bell, Smartphone, Globe, Zap, Shield, ArrowRight, Check, Store, Users, Lock } from "lucide-react";
+import { getAdminDb } from "@/lib/firebase-admin";
 
-export default function LandingPage() {
+async function getProPrice(): Promise<number> {
+  try {
+    const snap = await getAdminDb().collection("config").doc("plans").get();
+    return snap.data()?.proPrice ?? 2500;
+  } catch {
+    return 2500;
+  }
+}
+
+export default async function LandingPage() {
+  const proPrice = await getProPrice();
   return (
     <div className="min-h-screen bg-white text-gray-900">
 
@@ -210,7 +221,7 @@ export default function LandingPage() {
             <div className="mb-6">
               <p className="text-sm font-medium text-blue-200 mb-1">Pro</p>
               <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-bold">$2.500</span>
+                <span className="text-4xl font-bold">${proPrice.toLocaleString("es-AR")}</span>
                 <span className="text-blue-300 text-sm">/mes</span>
               </div>
               <p className="text-xs text-blue-300 mt-1">Pesos argentinos · MercadoPago</p>
