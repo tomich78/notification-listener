@@ -15,7 +15,7 @@ import {
   signOut,
   updateProfile,
 } from "firebase/auth";
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 
@@ -57,6 +57,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       plan: "free",
       createdAt: serverTimestamp(),
       publicViewEnabled: true,
+    });
+
+    // Notificar al admin (fire and forget)
+    newUser.getIdToken().then((token) => {
+      fetch("/api/notify-admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name, email }),
+      }).catch(() => {});
     });
 
     router.push("/dashboard");

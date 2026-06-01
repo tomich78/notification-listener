@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
+import { sendNewSubscriberEmail, sendCancellationEmail } from "@/lib/email";
 
 const ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN!;
 
@@ -32,20 +33,24 @@ export async function POST(req: NextRequest) {
 
   const db = getAdminDb();
 
+  // Obtener email del usuario para notificaciones
+  const userSnap = await db.collection("users").doc(uid).get();
+  const userEmail = userSnap.data()?.email ?? "";
+
   if (status === "authorized") {
-    // Activar plan Pro
     await db.collection("users").doc(uid).update({
       plan: "pro",
       mpSubscriptionId: preapprovalId,
       mpStatus: status,
       planActivatedAt: new Date(),
     });
+    sendNewSubscriberEmail(userEmail, preapprovalId).catch(console.error);
   } else if (status === "cancelled" || status === "paused") {
-    // Bajar a Free si se cancela o pausa
     await db.collection("users").doc(uid).update({
       plan: "free",
       mpStatus: status,
     });
+    sendCancellationEmail(userEmail).catch(console.error);
   }
 
   return NextResponse.json({ ok: true });
