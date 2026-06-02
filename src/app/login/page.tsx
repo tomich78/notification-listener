@@ -29,7 +29,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm">
         <div className="flex items-center justify-center gap-2 mb-8">
-          <Image src="/logo.webp" alt="NListener" width={36} height={36} className="rounded-xl" />
+          <Image src="/logo.webp" alt="NListener" width={48} height={48} className="rounded-xl" />
           <span className="font-bold text-gray-900">NListener</span>
         </div>
 

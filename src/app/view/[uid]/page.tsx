@@ -183,7 +183,7 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
       <div className="bg-white border-b border-gray-100 px-6 py-4">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Image src="/logo.webp" alt="NListener" width={36} height={36} className="rounded-lg" />
+            <Image src="/logo.webp" alt="NListener" width={48} height={48} className="rounded-lg" />
             <span className="font-semibold text-sm text-gray-900">
               {isToday ? "Cobros de hoy" : "Cobros"}
             </span>
