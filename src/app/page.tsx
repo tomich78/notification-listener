@@ -3,17 +3,30 @@ import Image from "next/image";
 import { Smartphone, Globe, Zap, Shield, ArrowRight, Check, Store, Users, Lock, Bell } from "lucide-react";
 import { getAdminDb } from "@/lib/firebase-admin";
 
-async function getProPrice(): Promise<number> {
+interface PlanConfig {
+  proPrice: number;
+  freeDeviceLimit: number;
+  proDeviceLimit: number;
+  freeNotifLimit: number;
+}
+
+async function getPlanConfig(): Promise<PlanConfig> {
   try {
     const snap = await getAdminDb().collection("config").doc("plans").get();
-    return snap.data()?.proPrice ?? 2500;
+    const d = snap.data() ?? {};
+    return {
+      proPrice:        d.proPrice        ?? 2500,
+      freeDeviceLimit: d.freeDeviceLimit ?? 1,
+      proDeviceLimit:  d.proDeviceLimit  ?? 5,
+      freeNotifLimit:  d.freeNotifLimit  ?? 100,
+    };
   } catch {
-    return 2500;
+    return { proPrice: 2500, freeDeviceLimit: 1, proDeviceLimit: 5, freeNotifLimit: 100 };
   }
 }
 
 export default async function LandingPage() {
-  const proPrice = await getProPrice();
+  const plan = await getPlanConfig();
   return (
     <div className="min-h-screen bg-white text-gray-900">
 
@@ -192,10 +205,10 @@ export default async function LandingPage() {
             </div>
             <ul className="space-y-3 mb-8">
               {[
-                "1 dispositivo Android",
-                "Hasta 100 cobros por mes",
+                `${plan.freeDeviceLimit} dispositivo Android`,
+                `Hasta ${plan.freeNotifLimit} cobros por mes`,
                 "Vista pública para empleados",
-                "Integración MercadoPago",
+                "Compatible con cualquier banco",
                 "Historial completo",
               ].map((f) => (
                 <li key={f} className="flex items-center gap-2.5 text-sm text-gray-700">
@@ -220,14 +233,14 @@ export default async function LandingPage() {
             <div className="mb-6">
               <p className="text-sm font-medium text-blue-200 mb-1">Pro</p>
               <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-bold">${proPrice.toLocaleString("es-AR")}</span>
+                <span className="text-4xl font-bold">${plan.proPrice.toLocaleString("es-AR")}</span>
                 <span className="text-blue-300 text-sm">/mes</span>
               </div>
               <p className="text-xs text-blue-300 mt-1">Pesos argentinos · MercadoPago</p>
             </div>
             <ul className="space-y-3 mb-8">
               {[
-                "Hasta 5 dispositivos Android",
+                `Hasta ${plan.proDeviceLimit} dispositivos Android`,
                 "Cobros ilimitados",
                 "Modo sucursales con colores",
                 "Totales por sucursal",
