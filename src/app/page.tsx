@@ -155,7 +155,7 @@ export default async function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
               { icon: <Smartphone className="w-4 h-4 text-blue-600" />, title: "App Android", desc: "Captura notificaciones de cualquier banco o billetera sin configuración extra." },
-              { icon: <Globe className="w-4 h-4 text-blue-600" />, title: "Compatible con cualquier banco", desc: "Funciona con MercadoPago, Naranja X, Ualá, Brubank, Galicia, Santander y más." },
+              { icon: <Globe className="w-4 h-4 text-blue-600" />, title: "Compatible con cualquier banco", desc: "Funciona con cualquier banco o billetera que envíe notificaciones de transferencias al celular." },
               { icon: <Zap className="w-4 h-4 text-blue-600" />, title: "Actualización en tiempo real", desc: "Los cobros aparecen en segundos. Sin recargar la pantalla." },
               { icon: <Shield className="w-4 h-4 text-blue-600" />, title: "Vista de solo lectura", desc: "El link para empleados no permite modificar nada. Solo ver. Con contraseña opcional." },
               { icon: <Users className="w-4 h-4 text-blue-600" />, title: "Modo sucursales", desc: "Asigná cada cobro a una sucursal. Cada empleado ve solo lo suyo. (Pro)" },
