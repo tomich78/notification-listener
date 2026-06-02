@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Bell } from "lucide-react";
+import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 
 export default function LoginPage() {
@@ -29,8 +29,8 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm">
         <div className="flex items-center justify-center gap-2 mb-8">
-          <Bell className="w-5 h-5 text-blue-600" />
-          <span className="font-semibold text-gray-900">NotificationListener</span>
+          <Image src="/logo.webp" alt="NListener" width={36} height={36} className="rounded-xl" />
+          <span className="font-bold text-gray-900">NListener</span>
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-200 p-8">

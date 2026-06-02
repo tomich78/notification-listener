@@ -21,7 +21,7 @@ export default async function LandingPage() {
       <nav className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-gray-100">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Image src="/logo.webp" alt="NListener" width={28} height={28} className="rounded-lg" />
+            <Image src="/logo.webp" alt="NListener" width={36} height={36} className="rounded-lg" />
             <span className="font-bold text-gray-900">NListener</span>
           </div>
           <div className="flex items-center gap-3">
@@ -273,7 +273,7 @@ export default async function LandingPage() {
       <footer className="border-t border-gray-100 py-8">
         <div className="max-w-5xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-400">
           <div className="flex items-center gap-2">
-            <Image src="/logo.webp" alt="NListener" width={22} height={22} className="rounded-md" />
+            <Image src="/logo.webp" alt="NListener" width={28} height={28} className="rounded-md" />
             <span className="font-medium text-gray-600">NListener</span>
           </div>
           <div className="flex items-center gap-6">

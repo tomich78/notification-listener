@@ -6,6 +6,7 @@ import { db } from "@/lib/firebase";
 import { Notification, BranchConfig } from "@/lib/types";
 import { formatCurrency, formatDateShort } from "@/lib/utils";
 import { Bell, Globe, Smartphone, Search, Calendar, Lock, ChevronDown } from "lucide-react";
+import Image from "next/image";
 
 const SOURCE_COLORS: Record<string, string> = {
   android: "bg-green-100 text-green-700",
@@ -182,7 +183,7 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
       <div className="bg-white border-b border-gray-100 px-6 py-4">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Bell className="w-4 h-4 text-blue-600" />
+            <Image src="/logo.webp" alt="NListener" width={36} height={36} className="rounded-lg" />
             <span className="font-semibold text-sm text-gray-900">
               {isToday ? "Cobros de hoy" : "Cobros"}
             </span>
