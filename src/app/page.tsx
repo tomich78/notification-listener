@@ -133,7 +133,7 @@ export default async function LandingPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {[
             { step: "1", icon: <Bell className="w-6 h-6 text-blue-600" />, title: "Creá tu cuenta", desc: "Registrate gratis. No hace falta tarjeta ni configuración técnica." },
-            { step: "2", icon: <Smartphone className="w-6 h-6 text-blue-600" />, title: "Conectá el celular", desc: "Instalá NListener en el Android que recibe las transferencias y escaneá el QR." },
+            { step: "2", icon: <Smartphone className="w-6 h-6 text-blue-600" />, title: "Conectá el celular", desc: "Instalá NListener en el Android donde llegan las notificaciones de transferencias y escaneá el QR." },
             { step: "3", icon: <Globe className="w-6 h-6 text-blue-600" />, title: "Compartí el link", desc: "Mandále a tus empleados el link de tu panel. Ven los cobros al instante." },
           ].map((item) => (
             <div key={item.step} className="flex flex-col items-center text-center">
@@ -155,7 +155,7 @@ export default async function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
               { icon: <Smartphone className="w-4 h-4 text-blue-600" />, title: "App Android", desc: "Captura notificaciones de cualquier banco o billetera sin configuración extra." },
-              { icon: <Globe className="w-4 h-4 text-blue-600" />, title: "Integración con MercadoPago", desc: "Conectá tu cuenta de MP con un webhook y recibí cobros sin usar el celular." },
+              { icon: <Globe className="w-4 h-4 text-blue-600" />, title: "Compatible con cualquier banco", desc: "Funciona con MercadoPago, Naranja X, Ualá, Brubank, Galicia, Santander y más." },
               { icon: <Zap className="w-4 h-4 text-blue-600" />, title: "Actualización en tiempo real", desc: "Los cobros aparecen en segundos. Sin recargar la pantalla." },
               { icon: <Shield className="w-4 h-4 text-blue-600" />, title: "Vista de solo lectura", desc: "El link para empleados no permite modificar nada. Solo ver. Con contraseña opcional." },
               { icon: <Users className="w-4 h-4 text-blue-600" />, title: "Modo sucursales", desc: "Asigná cada cobro a una sucursal. Cada empleado ve solo lo suyo. (Pro)" },
