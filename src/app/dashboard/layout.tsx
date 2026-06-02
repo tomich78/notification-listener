@@ -14,7 +14,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) router.push("/login");
+    if (loading) return;
+    if (!user) { router.push("/login"); return; }
+    if (!user.emailVerified) router.push("/verify-email");
   }, [user, loading, router]);
 
   // Cerrar sidebar al cambiar de página

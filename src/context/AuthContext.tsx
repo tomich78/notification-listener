@@ -15,6 +15,7 @@ import {
   signOut,
   updateProfile,
   sendPasswordResetEmail,
+  sendEmailVerification,
 } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -27,6 +28,7 @@ interface AuthContextType {
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  resendVerification: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -61,6 +63,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       publicViewEnabled: true,
     });
 
+    // Enviar verificación de email
+    await sendEmailVerification(newUser);
+
     // Notificar al admin (fire and forget)
     newUser.getIdToken().then((token) => {
       fetch("/api/notify-admin", {
@@ -70,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }).catch(() => {});
     });
 
-    router.push("/dashboard");
+    router.push("/verify-email");
   }
 
   async function logout() {
@@ -82,8 +87,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await sendPasswordResetEmail(auth, email);
   }
 
+  async function resendVerification() {
+    if (auth.currentUser) await sendEmailVerification(auth.currentUser);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, resetPassword }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, resetPassword, resendVerification }}>
       {children}
     </AuthContext.Provider>
   );
