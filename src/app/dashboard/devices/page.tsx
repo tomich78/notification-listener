@@ -5,7 +5,7 @@ import { collection, query, where, onSnapshot, Timestamp, doc, getDoc } from "fi
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Device } from "@/lib/types";
-import { Smartphone, Plus, Trash2, Wifi, WifiOff, X, Crown, FlaskConical, CheckCircle, AlertCircle } from "lucide-react";
+import { Smartphone, Plus, Trash2, Wifi, WifiOff, X, Crown, FlaskConical, CheckCircle, AlertCircle, RefreshCw } from "lucide-react";
 import QRCode from "react-qr-code";
 
 interface PlanConfig { freeDeviceLimit: number; proDeviceLimit: number }
@@ -21,6 +21,7 @@ export default function DevicesPage() {
   const [userPlan, setUserPlan] = useState<"free" | "pro">("free");
   const [planConfig, setPlanConfig] = useState<PlanConfig>(DEFAULT_CONFIG);
   const [testState, setTestState] = useState<"idle" | "sending" | "ok" | "error">("idle");
+  const [reconnectState, setReconnectState] = useState<Record<string, "idle" | "sending" | "ok" | "error">>({});
 
   useEffect(() => {
     if (!user) return;
@@ -89,6 +90,24 @@ export default function DevicesPage() {
       setTestState("error");
     } finally {
       setTimeout(() => setTestState("idle"), 4000);
+    }
+  }
+
+  async function reconnectDevice(deviceId: string) {
+    if (!user) return;
+    setReconnectState((s) => ({ ...s, [deviceId]: "sending" }));
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/devices/reconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ deviceId }),
+      });
+      setReconnectState((s) => ({ ...s, [deviceId]: res.ok ? "ok" : "error" }));
+    } catch {
+      setReconnectState((s) => ({ ...s, [deviceId]: "error" }));
+    } finally {
+      setTimeout(() => setReconnectState((s) => ({ ...s, [deviceId]: "idle" })), 4000);
     }
   }
 
@@ -273,12 +292,45 @@ export default function DevicesPage() {
                       </div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => removeDevice(d.id)}
-                    className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {!online && (
+                      <button
+                        onClick={() => reconnectDevice(d.id)}
+                        disabled={reconnectState[d.id] === "sending"}
+                        title="Reconectar dispositivo remotamente"
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          reconnectState[d.id] === "ok"
+                            ? "bg-green-100 text-green-700"
+                            : reconnectState[d.id] === "error"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                        } disabled:opacity-50`}
+                      >
+                        {reconnectState[d.id] === "sending" ? (
+                          <span className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                        ) : reconnectState[d.id] === "ok" ? (
+                          <CheckCircle className="w-3.5 h-3.5" />
+                        ) : reconnectState[d.id] === "error" ? (
+                          <AlertCircle className="w-3.5 h-3.5" />
+                        ) : (
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        )}
+                        {reconnectState[d.id] === "ok"
+                          ? "Enviado"
+                          : reconnectState[d.id] === "error"
+                          ? "Sin FCM"
+                          : reconnectState[d.id] === "sending"
+                          ? "..."
+                          : "Reconectar"}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => removeDevice(d.id)}
+                      className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </li>
               );
             })}
