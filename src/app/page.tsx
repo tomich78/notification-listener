@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Bell, Smartphone, Globe, Zap, Shield, ArrowRight, Check, Store, Users, Lock } from "lucide-react";
+import Image from "next/image";
+import { Smartphone, Globe, Zap, Shield, ArrowRight, Check, Store, Users, Lock, Bell } from "lucide-react";
 import { getAdminDb } from "@/lib/firebase-admin";
 
 async function getProPrice(): Promise<number> {
@@ -20,9 +21,7 @@ export default async function LandingPage() {
       <nav className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-gray-100">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center">
-              <Bell className="w-4 h-4 text-white" />
-            </div>
+            <Image src="/logo.svg" alt="NListener" width={28} height={28} className="rounded-lg" />
             <span className="font-bold text-gray-900">NListener</span>
           </div>
           <div className="flex items-center gap-3">
@@ -274,9 +273,7 @@ export default async function LandingPage() {
       <footer className="border-t border-gray-100 py-8">
         <div className="max-w-5xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-400">
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 bg-blue-600 rounded flex items-center justify-center">
-              <Bell className="w-3 h-3 text-white" />
-            </div>
+            <Image src="/logo.svg" alt="NListener" width={22} height={22} className="rounded-md" />
             <span className="font-medium text-gray-600">NListener</span>
           </div>
           <div className="flex items-center gap-6">

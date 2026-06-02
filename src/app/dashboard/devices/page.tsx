@@ -5,7 +5,7 @@ import { collection, query, where, onSnapshot, Timestamp, doc, getDoc } from "fi
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Device } from "@/lib/types";
-import { Smartphone, Plus, Trash2, Wifi, WifiOff, X, Crown } from "lucide-react";
+import { Smartphone, Plus, Trash2, Wifi, WifiOff, X, Crown, FlaskConical, CheckCircle, AlertCircle } from "lucide-react";
 import QRCode from "react-qr-code";
 
 interface PlanConfig { freeDeviceLimit: number; proDeviceLimit: number }
@@ -20,6 +20,7 @@ export default function DevicesPage() {
   const [qrData, setQrData] = useState<{ name: string; payload: string } | null>(null);
   const [userPlan, setUserPlan] = useState<"free" | "pro">("free");
   const [planConfig, setPlanConfig] = useState<PlanConfig>(DEFAULT_CONFIG);
+  const [testState, setTestState] = useState<"idle" | "sending" | "ok" | "error">("idle");
 
   useEffect(() => {
     if (!user) return;
@@ -74,13 +75,30 @@ export default function DevicesPage() {
     });
   }
 
+  async function sendTestNotification() {
+    if (!user) return;
+    setTestState("sending");
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/test-notification", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      setTestState(res.ok ? "ok" : "error");
+    } catch {
+      setTestState("error");
+    } finally {
+      setTimeout(() => setTestState("idle"), 4000);
+    }
+  }
+
   function isOnline(lastSeen: Timestamp | null): boolean {
     if (!lastSeen) return false;
     return Date.now() - lastSeen.toDate().getTime() < 5 * 60 * 1000;
   }
 
   return (
-    <div className="p-8 max-w-2xl">
+    <div className="p-4 md:p-8 max-w-2xl">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Dispositivos</h1>
         <p className="text-sm text-gray-500 mt-1">
@@ -172,6 +190,46 @@ export default function DevicesPage() {
           </div>
         </div>
       )}
+
+      {/* Panel de prueba de conexión */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-5 mb-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="font-semibold text-sm mb-1">Probar conexión</h2>
+            <p className="text-xs text-gray-500">
+              Enviá una notificación de prueba para verificar que el sistema está recibiendo datos correctamente.
+            </p>
+          </div>
+          <button
+            onClick={sendTestNotification}
+            disabled={testState === "sending"}
+            className="flex-shrink-0 flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          >
+            {testState === "sending" ? (
+              <span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <FlaskConical className="w-4 h-4" />
+            )}
+            {testState === "sending" ? "Enviando..." : "Enviar prueba"}
+          </button>
+        </div>
+        {testState === "ok" && (
+          <div className="flex items-center gap-2 mt-3 p-3 bg-green-50 border border-green-100 rounded-xl">
+            <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+            <p className="text-xs text-green-700 font-medium">
+              ¡Notificación enviada! Revisá el dashboard — debería aparecer en segundos.
+            </p>
+          </div>
+        )}
+        {testState === "error" && (
+          <div className="flex items-center gap-2 mt-3 p-3 bg-red-50 border border-red-100 rounded-xl">
+            <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+            <p className="text-xs text-red-700 font-medium">
+              No se pudo enviar. Revisá tu conexión a internet.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Lista de dispositivos */}
       <div className="bg-white rounded-2xl border border-gray-200">
