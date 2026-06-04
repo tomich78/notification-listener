@@ -5,7 +5,7 @@ import { collection, query, where, onSnapshot, Timestamp, doc, getDoc } from "fi
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Device } from "@/lib/types";
-import { Smartphone, Plus, Trash2, Wifi, WifiOff, X, Crown, FlaskConical, CheckCircle, AlertCircle, RefreshCw } from "lucide-react";
+import { Smartphone, Plus, Trash2, Wifi, WifiOff, X, Crown, FlaskConical, CheckCircle, AlertCircle, RefreshCw, PowerOff, Power } from "lucide-react";
 import QRCode from "react-qr-code";
 
 interface PlanConfig { freeDeviceLimit: number; proDeviceLimit: number }
@@ -22,6 +22,11 @@ export default function DevicesPage() {
   const [planConfig, setPlanConfig] = useState<PlanConfig>(DEFAULT_CONFIG);
   const [testState, setTestState] = useState<"idle" | "sending" | "ok" | "error">("idle");
   const [reconnectState, setReconnectState] = useState<Record<string, "idle" | "sending" | "ok" | "error">>({});
+  const [togglingDevice, setTogglingDevice] = useState<string | null>(null);
+
+  // Modal confirmación eliminar
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
+  const [deletingDevice, setDeletingDevice] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -32,10 +37,11 @@ export default function DevicesPage() {
       if (userSnap.exists()) setUserPlan(userSnap.data().plan ?? "free");
       if (configSnap.exists()) setPlanConfig(configSnap.data() as PlanConfig);
     }).catch(() => {});
+
+    // Traemos TODOS los dispositivos del usuario (activos e inactivos)
     const q = query(
       collection(db, "devices"),
-      where("userId", "==", user.uid),
-      where("active", "==", true)
+      where("userId", "==", user.uid)
     );
     return onSnapshot(q, (snap) => {
       setDevices(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Device[]);
@@ -43,8 +49,9 @@ export default function DevicesPage() {
     });
   }, [user]);
 
+  const activeDevices = devices.filter((d) => d.active);
   const deviceLimit = userPlan === "pro" ? planConfig.proDeviceLimit : planConfig.freeDeviceLimit;
-  const atLimit = devices.length >= deviceLimit;
+  const atLimit = activeDevices.length >= deviceLimit;
 
   async function addDevice() {
     if (!user || !newDeviceName.trim()) return;
@@ -57,7 +64,6 @@ export default function DevicesPage() {
         body: JSON.stringify({ name: newDeviceName.trim() }),
       });
       const data = await res.json();
-      // El payload del QR contiene la URL del servidor + el token
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin;
       const payload = JSON.stringify({ url: appUrl, token: data.token });
       setQrData({ name: newDeviceName.trim(), payload });
@@ -67,13 +73,34 @@ export default function DevicesPage() {
     }
   }
 
-  async function removeDevice(deviceId: string) {
+  async function toggleDevice(deviceId: string, currentActive: boolean) {
     if (!user) return;
-    const idToken = await user.getIdToken();
-    await fetch(`/api/devices?id=${deviceId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${idToken}` },
-    });
+    setTogglingDevice(deviceId);
+    try {
+      const idToken = await user.getIdToken();
+      await fetch(`/api/devices?id=${deviceId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ active: !currentActive }),
+      });
+    } finally {
+      setTogglingDevice(null);
+    }
+  }
+
+  async function deleteDevice(deviceId: string) {
+    if (!user) return;
+    setDeletingDevice(true);
+    try {
+      const idToken = await user.getIdToken();
+      await fetch(`/api/devices?id=${deviceId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      setConfirmDelete(null);
+    } finally {
+      setDeletingDevice(false);
+    }
   }
 
   async function sendTestNotification() {
@@ -122,7 +149,7 @@ export default function DevicesPage() {
         <h1 className="text-2xl font-bold text-gray-900">Dispositivos</h1>
         <p className="text-sm text-gray-500 mt-1">
           Administrá los celulares Android conectados a tu cuenta.{" "}
-          <span className="text-gray-400">({devices.length}/{deviceLimit} usados)</span>
+          <span className="text-gray-400">({activeDevices.length}/{deviceLimit} activos)</span>
         </p>
       </div>
 
@@ -134,7 +161,7 @@ export default function DevicesPage() {
             <div>
               <p className="text-sm font-medium text-amber-800">Límite de dispositivos alcanzado</p>
               <p className="text-xs text-amber-600 mt-0.5">
-                Tu plan {userPlan === "free" ? "Free" : "Pro"} permite hasta {deviceLimit} dispositivo{deviceLimit > 1 ? "s" : ""}.
+                Tu plan {userPlan === "free" ? "Free" : "Pro"} permite hasta {deviceLimit} dispositivo{deviceLimit > 1 ? "s" : ""} activo{deviceLimit > 1 ? "s" : ""}.
               </p>
             </div>
             {userPlan === "free" && (
@@ -178,28 +205,17 @@ export default function DevicesPage() {
                 <h3 className="font-bold text-gray-900">¡Dispositivo creado!</h3>
                 <p className="text-sm text-gray-500">{qrData.name}</p>
               </div>
-              <button
-                onClick={() => setQrData(null)}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-              >
+              <button onClick={() => setQrData(null)} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
                 <X className="w-5 h-5" />
               </button>
             </div>
-
-            {/* QR Code */}
             <div className="flex justify-center p-4 bg-white border-2 border-gray-100 rounded-xl mb-6">
               <QRCode value={qrData.payload} size={200} />
             </div>
-
             <div className="text-center space-y-2">
-              <p className="text-sm font-medium text-gray-700">
-                Escaneá este QR desde la app Android
-              </p>
-              <p className="text-xs text-gray-400">
-                Abrí NListener → Configurar → Escanear código QR
-              </p>
+              <p className="text-sm font-medium text-gray-700">Escaneá este QR desde la app Android</p>
+              <p className="text-xs text-gray-400">Abrí NListener → Configurar → Escanear código QR</p>
             </div>
-
             <button
               onClick={() => setQrData(null)}
               className="w-full mt-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
@@ -235,17 +251,13 @@ export default function DevicesPage() {
         {testState === "ok" && (
           <div className="flex items-center gap-2 mt-3 p-3 bg-green-50 border border-green-100 rounded-xl">
             <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-            <p className="text-xs text-green-700 font-medium">
-              ¡Notificación enviada! Revisá el dashboard — debería aparecer en segundos.
-            </p>
+            <p className="text-xs text-green-700 font-medium">¡Notificación enviada! Revisá el dashboard.</p>
           </div>
         )}
         {testState === "error" && (
           <div className="flex items-center gap-2 mt-3 p-3 bg-red-50 border border-red-100 rounded-xl">
             <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-            <p className="text-xs text-red-700 font-medium">
-              No se pudo enviar. Revisá tu conexión a internet.
-            </p>
+            <p className="text-xs text-red-700 font-medium">No se pudo enviar. Revisá tu conexión.</p>
           </div>
         )}
       </div>
@@ -253,7 +265,7 @@ export default function DevicesPage() {
       {/* Lista de dispositivos */}
       <div className="bg-white rounded-2xl border border-gray-200">
         <div className="px-5 py-4 border-b border-gray-100">
-          <h2 className="font-semibold text-sm text-gray-900">Dispositivos activos</h2>
+          <h2 className="font-semibold text-sm text-gray-900">Dispositivos</h2>
         </div>
 
         {loading ? (
@@ -268,24 +280,33 @@ export default function DevicesPage() {
         ) : (
           <ul className="divide-y divide-gray-50">
             {devices.map((d) => {
-              const online = isOnline(d.lastSeen);
+              const online = d.active && isOnline(d.lastSeen);
               return (
-                <li key={d.id} className="flex items-center justify-between px-5 py-4">
+                <li key={d.id} className={`flex items-center justify-between px-5 py-4 ${!d.active ? "opacity-50" : ""}`}>
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-                      <Smartphone className="w-4 h-4 text-gray-500" />
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${d.active ? "bg-gray-100" : "bg-gray-50"}`}>
+                      <Smartphone className={`w-4 h-4 ${d.active ? "text-gray-500" : "text-gray-300"}`} />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-900">{d.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-gray-900">{d.name}</p>
+                        {!d.active && (
+                          <span className="text-xs bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full">Inactivo</span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         {online
                           ? <Wifi className="w-3 h-3 text-green-500" />
                           : <WifiOff className="w-3 h-3 text-gray-300" />}
                         <span className={`text-xs ${online ? "text-green-600" : "text-gray-400"}`}>
-                          {online ? "Activo" : d.lastSeen
+                          {!d.active
+                            ? "Desactivado"
+                            : online
+                            ? "Activo"
+                            : d.lastSeen
                             ? `Último: ${new Intl.DateTimeFormat("es-AR", {
                                 day: "2-digit", month: "2-digit",
-                                hour: "2-digit", minute: "2-digit"
+                                hour: "2-digit", minute: "2-digit",
                               }).format(d.lastSeen.toDate())}`
                             : "Nunca conectado"}
                         </span>
@@ -293,11 +314,12 @@ export default function DevicesPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
-                    {!online && (
+                    {/* Reconectar — solo si activo y offline */}
+                    {d.active && !online && (
                       <button
                         onClick={() => reconnectDevice(d.id)}
                         disabled={reconnectState[d.id] === "sending"}
-                        title="Reconectar dispositivo remotamente"
+                        title="Reconectar dispositivo"
                         className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                           reconnectState[d.id] === "ok"
                             ? "bg-green-100 text-green-700"
@@ -315,17 +337,34 @@ export default function DevicesPage() {
                         ) : (
                           <RefreshCw className="w-3.5 h-3.5" />
                         )}
-                        {reconnectState[d.id] === "ok"
-                          ? "Enviado"
-                          : reconnectState[d.id] === "error"
-                          ? "Sin FCM"
-                          : reconnectState[d.id] === "sending"
-                          ? "..."
-                          : "Reconectar"}
+                        {reconnectState[d.id] === "ok" ? "Enviado" : reconnectState[d.id] === "error" ? "Sin FCM" : reconnectState[d.id] === "sending" ? "..." : "Reconectar"}
                       </button>
                     )}
+
+                    {/* Activar / Desactivar */}
                     <button
-                      onClick={() => removeDevice(d.id)}
+                      onClick={() => toggleDevice(d.id, d.active)}
+                      disabled={togglingDevice === d.id}
+                      title={d.active ? "Desactivar dispositivo" : "Activar dispositivo"}
+                      className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${
+                        d.active
+                          ? "text-gray-300 hover:text-yellow-500 hover:bg-yellow-50"
+                          : "text-gray-300 hover:text-green-500 hover:bg-green-50"
+                      }`}
+                    >
+                      {togglingDevice === d.id ? (
+                        <span className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin block" />
+                      ) : d.active ? (
+                        <PowerOff className="w-4 h-4" />
+                      ) : (
+                        <Power className="w-4 h-4" />
+                      )}
+                    </button>
+
+                    {/* Eliminar */}
+                    <button
+                      onClick={() => setConfirmDelete({ id: d.id, name: d.name })}
+                      title="Eliminar dispositivo"
                       className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -337,6 +376,41 @@ export default function DevicesPage() {
           </ul>
         )}
       </div>
+
+      {/* Modal confirmar eliminación */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-start gap-4 mb-5">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-1">Eliminar dispositivo</h3>
+                <p className="text-sm text-gray-500">
+                  ¿Querés eliminar <span className="font-medium text-gray-700">"{confirmDelete.name}"</span> de forma permanente? Esta acción no se puede deshacer.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                disabled={deletingDevice}
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => deleteDevice(confirmDelete.id)}
+                disabled={deletingDevice}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {deletingDevice ? "Eliminando..." : "Eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

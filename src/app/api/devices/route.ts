@@ -38,6 +38,36 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ deviceId: ref.id, token });
 }
 
+// PATCH /api/devices?id={deviceId}  — activa o desactiva
+export async function PATCH(req: NextRequest) {
+  const authHeader = req.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+  const idToken = authHeader.slice(7);
+  let uid: string;
+  try {
+    const decoded = await getAdminAuth().verifyIdToken(idToken);
+    uid = decoded.uid;
+  } catch {
+    return NextResponse.json({ error: "Token inválido" }, { status: 401 });
+  }
+  const deviceId = req.nextUrl.searchParams.get("id");
+  if (!deviceId) return NextResponse.json({ error: "Falta id" }, { status: 400 });
+
+  const body = await req.json().catch(() => null);
+  const active = Boolean(body?.active);
+
+  const db = getAdminDb();
+  const deviceRef = db.collection("devices").doc(deviceId);
+  const deviceSnap = await deviceRef.get();
+  if (!deviceSnap.exists || deviceSnap.data()?.userId !== uid) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+  }
+  await deviceRef.update({ active });
+  return NextResponse.json({ ok: true });
+}
+
 // DELETE /api/devices?id={deviceId}
 export async function DELETE(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
