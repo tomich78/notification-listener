@@ -28,7 +28,7 @@ export async function sendNewUserEmail(name: string, email: string) {
           </tr>
         </table>
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;" />
-        <a href="https://notification-listener-ql4m.vercel.app/admin"
+        <a href="https://nlistener.com.ar/admin"
            style="color: #2563eb; font-size: 13px;">
           Ver en panel de admin →
         </a>
@@ -60,7 +60,7 @@ export async function sendNewSubscriberEmail(email: string, subscriptionId: stri
           </tr>
         </table>
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;" />
-        <a href="https://notification-listener-ql4m.vercel.app/admin"
+        <a href="https://nlistener.com.ar/admin"
            style="color: #7c3aed; font-size: 13px;">
           Ver en panel de admin →
         </a>
