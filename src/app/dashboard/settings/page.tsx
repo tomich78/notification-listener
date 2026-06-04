@@ -4,7 +4,10 @@ import { useState, useEffect } from "react";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
-import { Copy, Check, ExternalLink, Share2, Smartphone, Globe, Zap, Crown, GitBranch, Plus, Trash2 } from "lucide-react";
+import { Copy, Check, ExternalLink, Share2, Smartphone, Globe, Zap, Crown, GitBranch, Plus, Trash2, AlertTriangle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { deleteUser } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { BranchConfig } from "@/lib/types";
 
 const BRANCH_COLORS = [
@@ -28,7 +31,11 @@ const DEFAULT_CONFIG: PlanConfig = {
 
 export default function SettingsPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [copied, setCopied] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [userPlan, setUserPlan] = useState<"free" | "pro">("free");
   const [planConfig, setPlanConfig] = useState<PlanConfig>(DEFAULT_CONFIG);
   const [loadingPlan, setLoadingPlan] = useState(true);
@@ -93,6 +100,24 @@ export default function SettingsPage() {
       alert("Error al guardar. Intentá de nuevo.");
     } finally {
       setSavingBranch(false);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    if (!user) return;
+    setDeletingAccount(true);
+    setDeleteError("");
+    try {
+      await deleteUser(auth.currentUser!);
+      router.push("/");
+    } catch (e: unknown) {
+      // Si el token expiró, Firebase pide reautenticación
+      if (e instanceof Error && e.message.includes("requires-recent-login")) {
+        setDeleteError("Por seguridad, cerrá sesión, volvé a iniciar sesión y luego eliminá la cuenta.");
+      } else {
+        setDeleteError("Ocurrió un error. Intentá de nuevo.");
+      }
+      setDeletingAccount(false);
     }
   }
 
@@ -362,7 +387,55 @@ export default function SettingsPage() {
             </code>
           </div>
         </div>
+
+        <div className="mt-6 pt-5 border-t border-gray-100">
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="flex items-center gap-2 text-sm text-red-500 hover:text-red-700 transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+            Eliminar cuenta
+          </button>
+        </div>
       </section>
+
+      {/* Modal confirmar eliminación de cuenta */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-start gap-4 mb-5">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-1">Eliminar cuenta</h3>
+                <p className="text-sm text-gray-500">
+                  Esta acción es permanente. Se eliminarán tu cuenta, dispositivos y todos los datos asociados. No se puede deshacer.
+                </p>
+              </div>
+            </div>
+            {deleteError && (
+              <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-4">{deleteError}</p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowDeleteConfirm(false); setDeleteError(""); }}
+                disabled={deletingAccount}
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deletingAccount}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {deletingAccount ? "Eliminando..." : "Sí, eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
