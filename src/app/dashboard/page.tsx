@@ -14,6 +14,7 @@ import {
   getDoc,
   getDocs,
   limit,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
@@ -55,7 +56,7 @@ interface NotifForm {
 function nowLocalDatetime() {
   const now = new Date();
   now.setSeconds(0, 0);
-  return now.toISOString().slice(0, 16); // YYYY-MM-DDTHH:mm
+  return now.toISOString().slice(0, 16);
 }
 
 const EMPTY_FORM: NotifForm = { text: "", app: "", amount: "", datetime: nowLocalDatetime() };
@@ -79,6 +80,26 @@ export default function DashboardPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
 
+  // Selección múltiple
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deletingMultiple, setDeletingMultiple] = useState(false);
+
+  // Modal de confirmación custom
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({ open: false, title: "", message: "", onConfirm: () => {} });
+
+  function openConfirm(title: string, message: string, onConfirm: () => void) {
+    setConfirmModal({ open: true, title, message, onConfirm });
+  }
+
+  function closeConfirm() {
+    setConfirmModal((prev) => ({ ...prev, open: false }));
+  }
+
   useEffect(() => {
     if (!user) return;
     user.getIdToken().then((token) => {
@@ -99,7 +120,6 @@ export default function DashboardPage() {
       const limit = snap.data()?.freeNotifLimit;
       if (limit) setNotifLimit(limit);
     });
-    // Verificar si debe mostrar el wizard
     const done = localStorage.getItem(`nlistener_onboarding_done_${user.uid}`);
     if (!done) {
       getDocs(query(collection(db, "devices"), where("userId", "==", user.uid), where("active", "==", true), limit(1)))
@@ -138,6 +158,9 @@ export default function DashboardPage() {
     return base;
   }, [notifications, filter, selectedDate, search]);
 
+  // Resetear selección cuando cambia el filtro
+  useEffect(() => { setSelected(new Set()); }, [filter, selectedDate, search]);
+
   const todayTotal = filtered
     .filter((n) => n.amount !== null)
     .reduce((sum, n) => sum + (n.amount ?? 0), 0);
@@ -151,6 +174,27 @@ export default function DashboardPage() {
       return ts && ts >= startOfMonth;
     }).length;
   }, [notifications]);
+
+  // — Selección —
+  const allSelected = filtered.length > 0 && filtered.every((n) => selected.has(n.id));
+  const someSelected = selected.size > 0;
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map((n) => n.id)));
+    }
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   // — Modal helpers —
   function openAdd() {
@@ -214,10 +258,33 @@ export default function DashboardPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("¿Eliminar esta notificación?")) return;
-    setDeleting(id);
-    await deleteDoc(doc(db, "notifications", id));
-    setDeleting(null);
+    openConfirm(
+      "Eliminar notificación",
+      "¿Estás seguro que querés eliminar esta notificación? Esta acción no se puede deshacer.",
+      async () => {
+        closeConfirm();
+        setDeleting(id);
+        await deleteDoc(doc(db, "notifications", id));
+        setDeleting(null);
+      }
+    );
+  }
+
+  async function handleDeleteSelected() {
+    const count = selected.size;
+    openConfirm(
+      "Eliminar notificaciones",
+      `¿Estás seguro que querés eliminar ${count} notificación${count > 1 ? "es" : ""}? Esta acción no se puede deshacer.`,
+      async () => {
+        closeConfirm();
+        setDeletingMultiple(true);
+        const batch = writeBatch(db);
+        selected.forEach((id) => batch.delete(doc(db, "notifications", id)));
+        await batch.commit();
+        setSelected(new Set());
+        setDeletingMultiple(false);
+      }
+    );
   }
 
   return (
@@ -280,6 +347,16 @@ export default function DashboardPage() {
                 <Plus className="w-3.5 h-3.5" />
                 Agregar
               </button>
+              {someSelected && (
+                <button
+                  onClick={handleDeleteSelected}
+                  disabled={deletingMultiple}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 text-xs font-medium rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {deletingMultiple ? "Eliminando..." : `Eliminar ${selected.size}`}
+                </button>
+              )}
             </div>
             <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
               <FilterBtn active={filter === "today"} onClick={() => setFilter("today")}>Hoy</FilterBtn>
@@ -325,6 +402,14 @@ export default function DashboardPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
+                  <th className="px-6 py-3 w-8">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                  </th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Fuente</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">App</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Notificación</th>
@@ -336,7 +421,18 @@ export default function DashboardPage() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filtered.map((n) => (
-                  <tr key={n.id} className="hover:bg-gray-50 transition-colors group">
+                  <tr
+                    key={n.id}
+                    className={`hover:bg-gray-50 transition-colors group ${selected.has(n.id) ? "bg-blue-50 hover:bg-blue-50" : ""}`}
+                  >
+                    <td className="px-6 py-3 w-8">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(n.id)}
+                        onChange={() => toggleSelect(n.id)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                    </td>
                     <td className="px-6 py-3">
                       <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${SOURCE_COLORS[n.source] ?? "bg-gray-100 text-gray-600"}`}>
                         {n.source === "android" ? <Smartphone className="w-3 h-3" /> : <Globe className="w-3 h-3" />}
@@ -398,7 +494,7 @@ export default function DashboardPage() {
         <OnboardingWizard onDone={() => setShowWizard(false)} />
       )}
 
-      {/* Modal */}
+      {/* Modal editar/agregar */}
       {modalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -469,6 +565,37 @@ export default function DashboardPage() {
                 className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
                 {saving ? "Guardando..." : editing ? "Guardar cambios" : "Agregar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación */}
+      {confirmModal.open && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-start gap-4 mb-5">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-1">{confirmModal.title}</h3>
+                <p className="text-sm text-gray-500">{confirmModal.message}</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={closeConfirm}
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmModal.onConfirm}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 transition-colors"
+              >
+                Eliminar
               </button>
             </div>
           </div>
