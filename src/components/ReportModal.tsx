@@ -1,0 +1,254 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { Notification, Device } from "@/lib/types";
+import { formatCurrency } from "@/lib/utils";
+import { X, FileDown, Loader2 } from "lucide-react";
+
+interface Props {
+  userId: string;
+  onClose: () => void;
+}
+
+function toLocalDateString(date: Date) {
+  return date.toLocaleDateString("en-CA");
+}
+
+export default function ReportModal({ userId, onClose }: Props) {
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set());
+  const [date, setDate] = useState(toLocalDateString(new Date()));
+  const [generating, setGenerating] = useState(false);
+  const [loadingDevices, setLoadingDevices] = useState(true);
+
+  useEffect(() => {
+    getDocs(query(
+      collection(db, "devices"),
+      where("userId", "==", userId)
+    )).then((snap) => {
+      const devs = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Device[];
+      setDevices(devs);
+      // Seleccionar todos por defecto
+      setSelectedDevices(new Set(devs.map(d => d.id)));
+      setLoadingDevices(false);
+    });
+  }, [userId]);
+
+  function toggleDevice(id: string) {
+    setSelectedDevices(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function generatePDF() {
+    setGenerating(true);
+    try {
+      // Traer notificaciones del día seleccionado
+      const startOfDay = new Date(date + "T00:00:00");
+      const endOfDay = new Date(date + "T23:59:59");
+
+      const snap = await getDocs(query(
+        collection(db, "notifications"),
+        where("userId", "==", userId),
+        where("timestamp", ">=", startOfDay),
+        where("timestamp", "<=", endOfDay),
+        orderBy("timestamp", "asc")
+      ));
+
+      let notifications = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Notification[];
+
+      // Filtrar por dispositivos seleccionados (incluir manuales si no hay deviceId)
+      if (selectedDevices.size < devices.length) {
+        notifications = notifications.filter(n =>
+          !n.deviceId || selectedDevices.has(n.deviceId)
+        );
+      }
+
+      // Importar jsPDF dinámicamente
+      const { default: jsPDF } = await import("jspdf");
+      const { default: autoTable } = await import("jspdf-autotable");
+
+      const doc = new jsPDF();
+      const dateFormatted = new Date(date + "T12:00:00").toLocaleDateString("es-AR", {
+        weekday: "long", year: "numeric", month: "long", day: "numeric"
+      });
+      const total = notifications.reduce((s, n) => s + (n.amount ?? 0), 0);
+      const totalStr = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(total);
+
+      // Header
+      doc.setFillColor(37, 99, 235);
+      doc.rect(0, 0, 210, 28, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.text("NListener", 14, 12);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text("Reporte de cobros", 14, 20);
+
+      // Fecha
+      doc.setTextColor(50, 50, 50);
+      doc.setFontSize(13);
+      doc.setFont("helvetica", "bold");
+      doc.text(dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1), 14, 40);
+
+      // Dispositivos incluidos
+      if (selectedDevices.size < devices.length) {
+        const names = devices.filter(d => selectedDevices.has(d.id)).map(d => d.name).join(", ");
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(100, 100, 100);
+        doc.text(`Dispositivos: ${names}`, 14, 48);
+      }
+
+      // Resumen
+      doc.setFillColor(239, 246, 255);
+      doc.roundedRect(14, 54, 85, 22, 3, 3, "F");
+      doc.setTextColor(37, 99, 235);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text("TOTAL DEL DÍA", 22, 62);
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.text(totalStr, 22, 72);
+
+      doc.setFillColor(240, 253, 244);
+      doc.roundedRect(109, 54, 87, 22, 3, 3, "F");
+      doc.setTextColor(22, 163, 74);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text("CANTIDAD DE COBROS", 117, 62);
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.text(`${notifications.length}`, 117, 72);
+
+      // Tabla
+      const rows = notifications.map(n => {
+        const ts = n.timestamp instanceof Date ? n.timestamp : (n.timestamp as { toDate: () => Date })?.toDate?.() ?? new Date();
+        const hora = ts.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+        const monto = n.amount !== null
+          ? new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(n.amount)
+          : "—";
+        const deviceName = devices.find(d => d.id === n.deviceId)?.name ?? "Manual";
+        return [hora, n.app, n.text.slice(0, 60) + (n.text.length > 60 ? "..." : ""), deviceName, monto];
+      });
+
+      autoTable(doc, {
+        startY: 84,
+        head: [["Hora", "App", "Notificación", "Dispositivo", "Monto"]],
+        body: rows,
+        styles: { fontSize: 8, cellPadding: 3 },
+        headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: {
+          0: { cellWidth: 15 },
+          1: { cellWidth: 25 },
+          2: { cellWidth: 80 },
+          3: { cellWidth: 30 },
+          4: { cellWidth: 30, halign: "right" },
+        },
+      });
+
+      // Footer
+      const pageCount = (doc as unknown as { internal: { getNumberOfPages: () => number } }).internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Generado por NListener · nlistener.com.ar`, 14, 290);
+        doc.text(`Página ${i} de ${pageCount}`, 196, 290, { align: "right" });
+      }
+
+      doc.save(`reporte-${date}.pdf`);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h3 className="font-semibold text-gray-900">Generar reporte PDF</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Exportá el resumen de cobros del día</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {/* Fecha */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Fecha</label>
+            <input
+              type="date"
+              value={date}
+              max={toLocalDateString(new Date())}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* Dispositivos */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Dispositivos a incluir
+            </label>
+            {loadingDevices ? (
+              <div className="flex items-center gap-2 text-sm text-gray-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Cargando dispositivos...
+              </div>
+            ) : devices.length === 0 ? (
+              <p className="text-sm text-gray-400">No hay dispositivos</p>
+            ) : (
+              <div className="space-y-2">
+                {devices.map(d => (
+                  <label key={d.id} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={selectedDevices.has(d.id)}
+                      onChange={() => toggleDevice(d.id)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">{d.name}</span>
+                    {!d.active && <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Inactivo</span>}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={generatePDF}
+            disabled={generating || selectedDevices.size === 0}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            {generating ? (
+              <><Loader2 className="w-4 h-4 animate-spin" />Generando...</>
+            ) : (
+              <><FileDown className="w-4 h-4" />Descargar PDF</>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

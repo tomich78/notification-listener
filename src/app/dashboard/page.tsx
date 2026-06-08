@@ -20,8 +20,9 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Notification, BranchConfig } from "@/lib/types";
 import { formatCurrency, formatDateShort, isToday, extractAmount } from "@/lib/utils";
-import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar, AlertTriangle } from "lucide-react";
+import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar, AlertTriangle, FileDown } from "lucide-react";
 import OnboardingWizard from "@/components/OnboardingWizard";
+import ReportModal from "@/components/ReportModal";
 
 function toLocalDateString(date: Date) {
   return date.toLocaleDateString("en-CA");
@@ -82,6 +83,7 @@ export default function DashboardPage() {
 
   // Selección múltiple
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [showReport, setShowReport] = useState(false);
   const [deletingMultiple, setDeletingMultiple] = useState(false);
 
   // Modal de confirmación custom
@@ -347,6 +349,15 @@ export default function DashboardPage() {
                 <Plus className="w-3.5 h-3.5" />
                 Agregar
               </button>
+              {userPlan === "pro" && (
+                <button
+                  onClick={() => setShowReport(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  <FileDown className="w-3.5 h-3.5" />
+                  Exportar PDF
+                </button>
+              )}
               {someSelected && (
                 <button
                   onClick={handleDeleteSelected}
@@ -569,6 +580,11 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal reporte PDF */}
+      {showReport && user && (
+        <ReportModal userId={user.uid} onClose={() => setShowReport(false)} />
       )}
 
       {/* Modal de confirmación */}
