@@ -293,88 +293,97 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
                 return (
                   <div
                     key={n.id}
-                    className="flex items-center justify-between px-5 py-4 transition-colors"
+                    className="px-4 py-4 transition-colors"
                     style={assignedBranch ? { backgroundColor: assignedBranch.color + "12", borderLeft: `3px solid ${assignedBranch.color}` } : {}}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${SOURCE_COLORS[n.source] ?? "bg-gray-100 text-gray-500"}`}>
-                        {n.source === "android" ? <Smartphone className="w-3.5 h-3.5" /> : <Globe className="w-3.5 h-3.5" />}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm text-gray-700 truncate">{n.text}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <p className="text-xs text-gray-400">{n.app}{n.deviceName ? ` · ${n.deviceName}` : ""}</p>
-                          {assignedBranch && (
-                            <span className="text-xs font-medium px-1.5 py-0.5 rounded-full text-white" style={{ backgroundColor: assignedBranch.color }}>
-                              {assignedBranch.name}
-                            </span>
-                          )}
+                    {/* Fila superior: ícono + texto + monto */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center mt-0.5 ${SOURCE_COLORS[n.source] ?? "bg-gray-100 text-gray-500"}`}>
+                          {n.source === "android" ? <Smartphone className="w-3.5 h-3.5" /> : <Globe className="w-3.5 h-3.5" />}
+                        </div>
+                        <div className="min-w-0">
+                          {/* Texto completo, sin truncar */}
+                          <p className="text-sm text-gray-700 break-words leading-snug">{n.text}</p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            {n.app}{n.deviceName ? ` · ${n.deviceName}` : ""}
+                          </p>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3 flex-shrink-0 ml-4">
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-gray-900">
+
+                      {/* Monto + hora alineados a la derecha */}
+                      <div className="flex-shrink-0 text-right">
+                        <p className="text-sm font-semibold text-gray-900 whitespace-nowrap">
                           {n.amount !== null ? formatCurrency(n.amount) : "—"}
                         </p>
-                        <p className="text-xs text-gray-400">
+                        <p className="text-xs text-gray-400 whitespace-nowrap">
                           {n.timestamp ? formatDateShort(n.timestamp) : "—"}
                         </p>
                       </div>
+                    </div>
 
-                      {/* Botón asignar sucursal */}
-                      {branchMode && (
-                        <div className="relative">
-                          <button
-                            onClick={() => setDropdownOpen(isOpen ? null : n.id)}
-                            disabled={isAssigning}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors disabled:opacity-50"
-                            style={assignedBranch
-                              ? { borderColor: assignedBranch.color, color: assignedBranch.color, backgroundColor: assignedBranch.color + "15" }
-                              : { borderColor: "#E5E7EB", color: "#6B7280" }
-                            }
-                          >
-                            {isAssigning ? (
-                              <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                            ) : (
-                              <>
-                                {assignedBranch
-                                  ? <><div className="w-2 h-2 rounded-full" style={{ backgroundColor: assignedBranch.color }} />{assignedBranch.name}</>
-                                  : "Asignar"
-                                }
-                                <ChevronDown className="w-3 h-3" />
-                              </>
-                            )}
-                          </button>
+                    {/* Fila inferior: sucursal asignada + botón asignar */}
+                    {(assignedBranch || branchMode) && (
+                      <div className="flex items-center justify-between mt-2 pl-10">
+                        {assignedBranch ? (
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: assignedBranch.color }}>
+                            {assignedBranch.name}
+                          </span>
+                        ) : <span />}
 
-                          {isOpen && (
-                            <div className="absolute right-0 top-full mt-1 bg-white rounded-xl border border-gray-200 shadow-lg z-10 min-w-36 py-1">
-                              {branchConfig!.branches.map((b) => (
-                                <button
-                                  key={b.id}
-                                  onClick={() => assignBranch(n.id, b.id)}
-                                  className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-gray-50 text-left"
-                                >
-                                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: b.color }} />
-                                  {b.name}
-                                </button>
-                              ))}
-                              {n.branchId && (
+                        {branchMode && (
+                          <div className="relative">
+                            <button
+                              onClick={() => setDropdownOpen(isOpen ? null : n.id)}
+                              disabled={isAssigning}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors disabled:opacity-50"
+                              style={assignedBranch
+                                ? { borderColor: assignedBranch.color, color: assignedBranch.color, backgroundColor: assignedBranch.color + "15" }
+                                : { borderColor: "#E5E7EB", color: "#6B7280" }
+                              }
+                            >
+                              {isAssigning ? (
+                                <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                              ) : (
                                 <>
-                                  <div className="border-t border-gray-100 my-1" />
-                                  <button
-                                    onClick={() => assignBranch(n.id, null)}
-                                    className="w-full px-3 py-2 text-xs text-gray-400 hover:bg-gray-50 text-left"
-                                  >
-                                    Quitar asignación
-                                  </button>
+                                  {assignedBranch
+                                    ? <><div className="w-2 h-2 rounded-full" style={{ backgroundColor: assignedBranch.color }} />{assignedBranch.name}</>
+                                    : "Asignar"
+                                  }
+                                  <ChevronDown className="w-3 h-3" />
                                 </>
                               )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                            </button>
+
+                            {isOpen && (
+                              <div className="absolute right-0 top-full mt-1 bg-white rounded-xl border border-gray-200 shadow-lg z-10 min-w-36 py-1">
+                                {branchConfig!.branches.map((b) => (
+                                  <button
+                                    key={b.id}
+                                    onClick={() => assignBranch(n.id, b.id)}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-gray-50 text-left"
+                                  >
+                                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: b.color }} />
+                                    {b.name}
+                                  </button>
+                                ))}
+                                {n.branchId && (
+                                  <>
+                                    <div className="border-t border-gray-100 my-1" />
+                                    <button
+                                      onClick={() => assignBranch(n.id, null)}
+                                      className="w-full px-3 py-2 text-xs text-gray-400 hover:bg-gray-50 text-left"
+                                    >
+                                      Quitar asignación
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
