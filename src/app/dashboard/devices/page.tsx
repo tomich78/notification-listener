@@ -140,7 +140,20 @@ export default function DevicesPage() {
 
   function isOnline(lastSeen: Timestamp | null): boolean {
     if (!lastSeen) return false;
-    return Date.now() - lastSeen.toDate().getTime() < 5 * 60 * 1000;
+    // Consideramos online si el heartbeat llegó en los últimos 10 minutos
+    // (el KeepAliveService manda heartbeat cada ~4 minutos)
+    return Date.now() - lastSeen.toDate().getTime() < 10 * 60 * 1000;
+  }
+
+  function lastSeenText(lastSeen: Timestamp | null): string {
+    if (!lastSeen) return "Nunca conectado";
+    const diff = Date.now() - lastSeen.toDate().getTime();
+    const mins = Math.floor(diff / 60_000);
+    if (mins < 1) return "Ahora mismo";
+    if (mins < 60) return `Hace ${mins} min`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `Hace ${hours}h`;
+    return `Hace ${Math.floor(hours / 24)}d`;
   }
 
   return (
@@ -295,20 +308,19 @@ export default function DevicesPage() {
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        {online
-                          ? <Wifi className="w-3 h-3 text-green-500" />
-                          : <WifiOff className="w-3 h-3 text-gray-300" />}
-                        <span className={`text-xs ${online ? "text-green-600" : "text-gray-400"}`}>
+                        {!d.active ? (
+                          <WifiOff className="w-3 h-3 text-gray-300" />
+                        ) : online ? (
+                          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        ) : (
+                          <WifiOff className="w-3 h-3 text-gray-300" />
+                        )}
+                        <span className={`text-xs ${online ? "text-green-600 font-medium" : "text-gray-400"}`}>
                           {!d.active
                             ? "Desactivado"
                             : online
-                            ? "Activo"
-                            : d.lastSeen
-                            ? `Último: ${new Intl.DateTimeFormat("es-AR", {
-                                day: "2-digit", month: "2-digit",
-                                hour: "2-digit", minute: "2-digit",
-                              }).format(d.lastSeen.toDate())}`
-                            : "Nunca conectado"}
+                            ? `Conectado · ${lastSeenText(d.lastSeen)}`
+                            : `Desconectado · ${lastSeenText(d.lastSeen)}`}
                         </span>
                       </div>
                     </div>
