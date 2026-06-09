@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Smartphone, Globe, Zap, Shield, ArrowRight, Check, Store, Users, Lock, Bell } from "lucide-react";
 import { getAdminDb } from "@/lib/firebase-admin";
+import AuthRedirect from "@/components/AuthRedirect";
 
 interface PlanConfig {
   proPrice: number;
@@ -31,6 +32,7 @@ export default async function LandingPage() {
   const plan = await getPlanConfig();
   return (
     <div className="min-h-screen bg-white text-gray-900">
+      <AuthRedirect />
 
       {/* Nav */}
       <nav className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-gray-100">
