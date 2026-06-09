@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
-import { Users, Smartphone, BarChart2, Tag, LogOut } from "lucide-react";
+import { Users, Smartphone, BarChart2, Tag, LogOut, ExternalLink } from "lucide-react";
 
 const ADMIN_EMAIL = "tdsdeveloper00@gmail.com";
 
@@ -162,7 +162,7 @@ function UsersTab({ user }: { user: { getIdToken: () => Promise<string> } }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-100">
-            <Th>Nombre</Th><Th>Email</Th><Th>Plan</Th><Th>Creado</Th><Th>Acción</Th>
+            <Th>Nombre</Th><Th>Email</Th><Th>Plan</Th><Th>Creado</Th><Th>Vista pública</Th><Th>Acción</Th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
@@ -179,6 +179,17 @@ function UsersTab({ user }: { user: { getIdToken: () => Promise<string> } }) {
               </td>
               <td className="px-4 py-3 text-gray-400 text-xs">
                 {u.createdAt ? new Date(u.createdAt).toLocaleDateString("es-AR") : "—"}
+              </td>
+              <td className="px-4 py-3">
+                <a
+                  href={`/view/${u.uid}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Ver
+                </a>
               </td>
               <td className="px-4 py-3">
                 <button

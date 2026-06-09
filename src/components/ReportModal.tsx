@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
+import { collection, query, where, orderBy, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Notification, Device } from "@/lib/types";
+import { Notification, Device, BranchConfig } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 import { X, FileDown, Loader2 } from "lucide-react";
 
@@ -19,22 +19,40 @@ function toLocalDateString(date: Date) {
 export default function ReportModal({ userId, onClose }: Props) {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set());
+  const [branchConfig, setBranchConfig] = useState<BranchConfig | null>(null);
+  const [selectedBranches, setSelectedBranches] = useState<Set<string>>(new Set());
   const [date, setDate] = useState(toLocalDateString(new Date()));
   const [generating, setGenerating] = useState(false);
   const [loadingDevices, setLoadingDevices] = useState(true);
 
   useEffect(() => {
-    getDocs(query(
-      collection(db, "devices"),
-      where("userId", "==", userId)
-    )).then((snap) => {
-      const devs = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Device[];
+    // Cargar dispositivos y config de sucursales en paralelo
+    Promise.all([
+      getDocs(query(collection(db, "devices"), where("userId", "==", userId))),
+      getDoc(doc(db, "users", userId)),
+    ]).then(([devSnap, userSnap]) => {
+      const devs = devSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Device[];
       setDevices(devs);
-      // Seleccionar todos por defecto
       setSelectedDevices(new Set(devs.map(d => d.id)));
+
+      const userData = userSnap.data();
+      const bc: BranchConfig | null = userData?.branchConfig ?? null;
+      if (bc?.enabled && bc.branches.length > 0) {
+        setBranchConfig(bc);
+        setSelectedBranches(new Set(bc.branches.map(b => b.id)));
+      }
+
       setLoadingDevices(false);
     });
   }, [userId]);
+
+  function toggleBranch(id: string) {
+    setSelectedBranches(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
   function toggleDevice(id: string) {
     setSelectedDevices(prev => {
@@ -69,6 +87,13 @@ export default function ReportModal({ userId, onClose }: Props) {
         );
       }
 
+      // Filtrar por sucursales si el modo está activo
+      if (branchConfig?.enabled && branchConfig.branches.length > 0 && selectedBranches.size < branchConfig.branches.length) {
+        notifications = notifications.filter(n =>
+          n.branchId ? selectedBranches.has(n.branchId) : false
+        );
+      }
+
       // Importar jsPDF dinámicamente
       const { default: jsPDF } = await import("jspdf");
       const { default: autoTable } = await import("jspdf-autotable");
@@ -97,13 +122,22 @@ export default function ReportModal({ userId, onClose }: Props) {
       doc.setFont("helvetica", "bold");
       doc.text(dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1), 14, 40);
 
-      // Dispositivos incluidos
+      // Subtítulos: dispositivos y/o sucursales
+      let subtitleY = 48;
       if (selectedDevices.size < devices.length) {
         const names = devices.filter(d => selectedDevices.has(d.id)).map(d => d.name).join(", ");
         doc.setFontSize(9);
         doc.setFont("helvetica", "normal");
         doc.setTextColor(100, 100, 100);
-        doc.text(`Dispositivos: ${names}`, 14, 48);
+        doc.text(`Dispositivos: ${names}`, 14, subtitleY);
+        subtitleY += 6;
+      }
+      if (branchConfig?.enabled && branchConfig.branches.length > 0 && selectedBranches.size < branchConfig.branches.length) {
+        const names = branchConfig.branches.filter(b => selectedBranches.has(b.id)).map(b => b.name).join(", ");
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(100, 100, 100);
+        doc.text(`Sucursales: ${names}`, 14, subtitleY);
       }
 
       // Resumen
@@ -128,6 +162,8 @@ export default function ReportModal({ userId, onClose }: Props) {
       doc.text(`${notifications.length}`, 117, 72);
 
       // Tabla
+      const hasBranches = branchConfig?.enabled && branchConfig.branches.length > 0;
+
       const rows = notifications.map(n => {
         const ts = n.timestamp instanceof Date ? n.timestamp : (n.timestamp as { toDate: () => Date })?.toDate?.() ?? new Date();
         const hora = ts.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
@@ -135,17 +171,32 @@ export default function ReportModal({ userId, onClose }: Props) {
           ? new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(n.amount)
           : "—";
         const deviceName = devices.find(d => d.id === n.deviceId)?.name ?? "Manual";
-        return [hora, n.app, n.text.slice(0, 60) + (n.text.length > 60 ? "..." : ""), deviceName, monto];
+        const branchName = hasBranches
+          ? (branchConfig!.branches.find(b => b.id === n.branchId)?.name ?? "—")
+          : null;
+        return hasBranches
+          ? [hora, n.app, n.text.slice(0, 55) + (n.text.length > 55 ? "..." : ""), deviceName, branchName, monto]
+          : [hora, n.app, n.text.slice(0, 60) + (n.text.length > 60 ? "..." : ""), deviceName, monto];
       });
 
       autoTable(doc, {
         startY: 84,
-        head: [["Hora", "App", "Notificación", "Dispositivo", "Monto"]],
+        head: [hasBranches
+          ? ["Hora", "App", "Notificación", "Dispositivo", "Sucursal", "Monto"]
+          : ["Hora", "App", "Notificación", "Dispositivo", "Monto"]
+        ],
         body: rows,
         styles: { fontSize: 8, cellPadding: 3 },
         headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: "bold" },
         alternateRowStyles: { fillColor: [248, 250, 252] },
-        columnStyles: {
+        columnStyles: hasBranches ? {
+          0: { cellWidth: 13 },
+          1: { cellWidth: 22 },
+          2: { cellWidth: 65 },
+          3: { cellWidth: 28 },
+          4: { cellWidth: 28 },
+          5: { cellWidth: 24, halign: "right" },
+        } : {
           0: { cellWidth: 15 },
           1: { cellWidth: 25 },
           2: { cellWidth: 80 },
@@ -173,7 +224,7 @@ export default function ReportModal({ userId, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <div>
@@ -227,6 +278,49 @@ export default function ReportModal({ userId, onClose }: Props) {
               </div>
             )}
           </div>
+
+          {/* Sucursales (solo si el modo está activo) */}
+          {branchConfig?.enabled && branchConfig.branches.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Sucursales a incluir
+              </label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 p-2 cursor-pointer hover:bg-gray-50 rounded-lg transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={selectedBranches.size === branchConfig.branches.length}
+                    onChange={() => {
+                      if (selectedBranches.size === branchConfig.branches.length) {
+                        setSelectedBranches(new Set());
+                      } else {
+                        setSelectedBranches(new Set(branchConfig.branches.map(b => b.id)));
+                      }
+                    }}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-gray-600">Todas las sucursales</span>
+                </label>
+                <div className="border-t border-gray-100 pt-2 space-y-1.5">
+                  {branchConfig.branches.map(b => (
+                    <label key={b.id} className="flex items-center gap-3 p-2.5 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={selectedBranches.has(b.id)}
+                        onChange={() => toggleBranch(b.id)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span
+                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: b.color }}
+                      />
+                      <span className="text-sm text-gray-700">{b.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-3 mt-6">
