@@ -88,6 +88,7 @@ export function isPaymentNotification(text: string): boolean {
     "cashback",
     "reintegro",
     "devolución de",
+    "compra tu point"
   ];
 
   // Si contiene alguna palabra de spam → descartar
