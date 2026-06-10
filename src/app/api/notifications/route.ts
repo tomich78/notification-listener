@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { extractAmount } from "@/lib/utils";
+import { extractAmount, isPaymentNotification } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -90,10 +90,14 @@ export async function POST(req: NextRequest) {
 
   // Guardar cada notificación en Firestore (batch write)
   const batch = db.batch();
+  let saved = 0;
   for (const n of incoming) {
     const text = String(n.text ?? "").slice(0, 1000);
     const app  = String(n.app  ?? "").slice(0, 100);
     if (!text || !app) continue;
+
+    // Filtrar notificaciones que no son cobros reales (promos, recordatorios, etc.)
+    if (!isPaymentNotification(text)) continue;
 
     const ref = db.collection("notifications").doc();
     batch.set(ref, {
@@ -108,11 +112,12 @@ export async function POST(req: NextRequest) {
         ? new Date(n.timestamp)
         : FieldValue.serverTimestamp(),
     });
+    saved++;
   }
   await batch.commit();
 
   // Actualizar lastSeen del dispositivo
   await deviceDoc.ref.update({ lastSeen: FieldValue.serverTimestamp() });
 
-  return NextResponse.json({ ok: true, saved: incoming.length });
+  return NextResponse.json({ ok: true, saved });
 }
