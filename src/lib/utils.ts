@@ -88,7 +88,29 @@ export function isPaymentNotification(text: string): boolean {
     "cashback",
     "reintegro",
     "devolución de",
-    "compra tu point"
+    "compra tu point",
+    // Juegos, sorteos, concursos
+    "competí",
+    "competir",
+    "sorteo",
+    "ilusión",
+    "partido",
+    "ganás hasta",
+    "ganá hasta",
+    "us$",
+    "usd",
+    "dólares",
+    "premio",
+    "premios",
+    "apostá",
+    "apostar",
+    // Publicidad genérica
+    "hacé click",
+    "entrá ahora",
+    "descubrí",
+    "disponible para vos",
+    "conseguí",
+    "arranca",
   ];
 
   // Si contiene alguna palabra de spam → descartar
@@ -97,8 +119,8 @@ export function isPaymentNotification(text: string): boolean {
   // Si contiene alguna palabra de cobro → es un pago
   if (paymentKeywords.some((kw) => t.includes(kw))) return true;
 
-  // Sin palabras clave de ningún tipo:
-  // Solo guardar si tiene un monto ($) para no perder cobros con frases poco comunes
+  // Fallback: solo guardar si tiene $ + número Y no parece publicidad
+  // (excluye "US$ X", ya filtrado arriba por "us$")
   return /\$\s*\d/.test(text);
 }
 
