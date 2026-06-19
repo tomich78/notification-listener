@@ -77,7 +77,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen flex">
 
       {/* Sidebar desktop */}
-      <aside className="hidden md:flex w-56 bg-white border-r border-gray-100 flex-col flex-shrink-0">
+      <aside className="hidden md:flex w-56 bg-white border-r border-gray-100 flex-col flex-shrink-0 h-screen sticky top-0">
         {sidebarContent}
       </aside>
 

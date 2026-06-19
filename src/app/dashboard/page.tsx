@@ -414,45 +414,46 @@ export default function DashboardPage() {
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-100 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h2 className="font-semibold text-sm text-gray-900">Notificaciones</h2>
+        <div className="px-4 md:px-6 py-4 border-b border-gray-100 space-y-3">
+          {/* Fila 1: título + acciones + filtros (wrappea en mobile) */}
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-semibold text-sm text-gray-900 mr-1">Notificaciones</h2>
+            <button
+              onClick={openAdd}
+              className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Agregar
+            </button>
+            {userPlan === "pro" && (
               <button
-                onClick={openAdd}
-                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                onClick={() => setShowReport(true)}
+                className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors"
               >
-                <Plus className="w-3.5 h-3.5" />
-                Agregar
+                <FileDown className="w-3.5 h-3.5" />
+                PDF
               </button>
-              {userPlan === "pro" && (
-                <button
-                  onClick={() => setShowReport(true)}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  <FileDown className="w-3.5 h-3.5" />
-                  Exportar PDF
-                </button>
-              )}
-              {someSelected && (
-                <button
-                  onClick={handleDeleteSelected}
-                  disabled={deletingMultiple}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 text-xs font-medium rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  {deletingMultiple ? "Eliminando..." : `Eliminar ${selected.size}`}
-                </button>
-              )}
-            </div>
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+            )}
+            {someSelected && (
+              <button
+                onClick={handleDeleteSelected}
+                disabled={deletingMultiple}
+                className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 text-xs font-medium rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {deletingMultiple ? "Eliminando..." : `Eliminar ${selected.size}`}
+              </button>
+            )}
+            {/* Filtros al final de la fila, van a la siguiente línea en mobile si no caben */}
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1 ml-auto">
               <FilterBtn active={filter === "today"} onClick={() => setFilter("today")}>Hoy</FilterBtn>
               <FilterBtn active={filter === "date"} onClick={() => setFilter("date")}>Fecha</FilterBtn>
               <FilterBtn active={filter === "all"} onClick={() => setFilter("all")}>Todas</FilterBtn>
             </div>
           </div>
 
-          <div className="flex gap-3">
+          {/* Fila 2: fecha + búsqueda */}
+          <div className="flex gap-2">
             {filter === "date" && (
               <div className="relative flex-shrink-0">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -465,11 +466,11 @@ export default function DashboardPage() {
                 />
               </div>
             )}
-            <div className="relative flex-1">
+            <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Buscar notificaciones..."
+                placeholder="Buscar..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -489,7 +490,7 @@ export default function DashboardPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="px-6 py-3 w-8">
+                  <th className="px-3 md:px-6 py-3 w-8">
                     <input
                       type="checkbox"
                       checked={allSelected}
@@ -497,13 +498,13 @@ export default function DashboardPage() {
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                     />
                   </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Fuente</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">App</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Notificación</th>
-                  <th className="text-right px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Monto</th>
-                  <th className="text-right px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Hora</th>
-                  {branchConfig && <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Sucursal</th>}
-                  <th className="px-6 py-3" />
+                  <th className="hidden md:table-cell text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Fuente</th>
+                  <th className="hidden md:table-cell text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">App</th>
+                  <th className="text-left px-3 md:px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Notificación</th>
+                  <th className="text-right px-3 md:px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Monto</th>
+                  <th className="hidden sm:table-cell text-right px-3 md:px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Hora</th>
+                  {branchConfig && <th className="hidden sm:table-cell text-left px-3 md:px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Sucursal</th>}
+                  <th className="px-2 md:px-6 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -512,7 +513,7 @@ export default function DashboardPage() {
                     key={n.id}
                     className={`hover:bg-gray-50 transition-colors group ${selected.has(n.id) ? "bg-blue-50 hover:bg-blue-50" : ""}`}
                   >
-                    <td className="px-6 py-3 w-8">
+                    <td className="px-3 md:px-6 py-3 w-8">
                       <input
                         type="checkbox"
                         checked={selected.has(n.id)}
@@ -520,22 +521,22 @@ export default function DashboardPage() {
                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                       />
                     </td>
-                    <td className="px-6 py-3">
+                    <td className="hidden md:table-cell px-6 py-3">
                       <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${SOURCE_COLORS[n.source] ?? "bg-gray-100 text-gray-600"}`}>
                         {n.source === "android" ? <Smartphone className="w-3 h-3" /> : <Globe className="w-3 h-3" />}
                         {SOURCE_LABELS[n.source] ?? n.source}
                       </span>
                     </td>
-                    <td className="px-6 py-3 text-gray-600">{n.app}</td>
-                    <td className="px-6 py-3 text-gray-700 max-w-xs truncate">{n.text}</td>
-                    <td className="px-6 py-3 text-right font-medium text-gray-900">
+                    <td className="hidden md:table-cell px-6 py-3 text-gray-600">{n.app}</td>
+                    <td className="px-3 md:px-6 py-3 text-gray-700 max-w-[160px] md:max-w-xs truncate">{n.text}</td>
+                    <td className="px-3 md:px-6 py-3 text-right font-medium text-gray-900 whitespace-nowrap">
                       {n.amount !== null ? formatCurrency(n.amount) : "—"}
                     </td>
-                    <td className="px-6 py-3 text-right text-gray-400">
+                    <td className="hidden sm:table-cell px-3 md:px-6 py-3 text-right text-gray-400 whitespace-nowrap">
                       {n.timestamp ? formatDateShort(n.timestamp) : "—"}
                     </td>
                     {branchConfig && (
-                      <td className="px-6 py-3">
+                      <td className="hidden sm:table-cell px-3 md:px-6 py-3">
                         {(() => {
                           const branch = branchConfig.branches.find((b) => b.id === n.branchId);
                           return branch ? (
@@ -551,8 +552,8 @@ export default function DashboardPage() {
                         })()}
                       </td>
                     )}
-                    <td className="px-6 py-3">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <td className="px-2 md:px-6 py-3">
+                      <div className="flex items-center justify-end gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => openEdit(n)}
                           className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -576,7 +577,7 @@ export default function DashboardPage() {
         )}
 
         {/* Cargar más */}
-        {!loading && (hasMore || loadingMore) && filter === "all" && !search.trim() && (
+        {!loading && (hasMore || loadingMore) && !search.trim() && (
           <div className="px-6 py-4 border-t border-gray-100 flex justify-center">
             <button
               onClick={loadMore}
