@@ -12,7 +12,6 @@ interface IncomingNotification {
 }
 
 // Cache en módulo — sobrevive entre requests en la misma instancia de Vercel
-// Evita leer Firestore en cada request para datos que no cambian seguido
 const planConfigCache = {
   value: null as { freeNotifLimit: number } | null,
   expiry: 0,
@@ -20,8 +19,12 @@ const planConfigCache = {
 
 const userPlanCache = new Map<string, { plan: string; expiry: number }>();
 
-const PLAN_CONFIG_TTL  = 10 * 60 * 1000; // 10 minutos
-const USER_PLAN_TTL    =  5 * 60 * 1000; // 5 minutos
+interface DeviceInfo { docPath: string; userId: string; name: string | null }
+const deviceTokenCache = new Map<string, { device: DeviceInfo; expiry: number }>();
+
+const PLAN_CONFIG_TTL   = 10 * 60 * 1000; // 10 minutos
+const USER_PLAN_TTL     =  5 * 60 * 1000; // 5 minutos
+const DEVICE_TOKEN_TTL  = 60 * 60 * 1000; // 1 hora (igual que heartbeat)
 
 async function getPlansConfig(db: FirebaseFirestore.Firestore): Promise<{ freeNotifLimit: number }> {
   if (planConfigCache.value && Date.now() < planConfigCache.expiry) {
@@ -59,20 +62,31 @@ export async function POST(req: NextRequest) {
   try {
     const db = getAdminDb();
 
-    // Verificar el token del dispositivo
-    const deviceSnap = await db
-      .collection("devices")
-      .where("token", "==", deviceToken)
-      .where("active", "==", true)
-      .limit(1)
-      .get();
+    // Verificar el token del dispositivo — con cache de 1h para no leer Firestore en cada notificación
+    let deviceInfo: DeviceInfo | null = null;
+    let deviceDocRef: FirebaseFirestore.DocumentReference | null = null;
 
-    if (deviceSnap.empty) {
-      return NextResponse.json({ error: "Token inválido" }, { status: 401 });
+    const cachedDevice = deviceTokenCache.get(deviceToken);
+    if (cachedDevice && Date.now() < cachedDevice.expiry) {
+      deviceInfo = cachedDevice.device;
+      deviceDocRef = db.doc(deviceInfo.docPath);
+    } else {
+      const deviceSnap = await db
+        .collection("devices")
+        .where("token", "==", deviceToken)
+        .where("active", "==", true)
+        .limit(1)
+        .get();
+
+      if (deviceSnap.empty) {
+        return NextResponse.json({ error: "Token inválido" }, { status: 401 });
+      }
+
+      const d = deviceSnap.docs[0];
+      deviceInfo = { docPath: d.ref.path, userId: d.data().userId, name: d.data().name ?? null };
+      deviceDocRef = d.ref;
+      deviceTokenCache.set(deviceToken, { device: deviceInfo, expiry: Date.now() + DEVICE_TOKEN_TTL });
     }
-
-    const deviceDoc = deviceSnap.docs[0];
-    const device = deviceDoc.data();
 
     // Validar body
     const body = await req.json().catch(() => null);
@@ -95,23 +109,21 @@ export async function POST(req: NextRequest) {
     });
 
     if (filtered.length === 0) {
-      // Actualizar lastSeen sin hacer más lecturas
-      await deviceDoc.ref.update({ lastSeen: FieldValue.serverTimestamp() });
+      await deviceDocRef!.update({ lastSeen: FieldValue.serverTimestamp() });
       return NextResponse.json({ ok: true, saved: 0 });
     }
 
     // Verificar plan — usando cache para no leer Firestore en cada request
-    const userPlan = await getUserPlan(db, device.userId);
+    const userPlan = await getUserPlan(db, deviceInfo.userId);
 
     let toSave = filtered;
     if (userPlan === "free") {
       const config = await getPlansConfig(db);
-      // Contar notificaciones del mes — solo si el plan es free y hay un límite
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const countSnap = await db
         .collection("notifications")
-        .where("userId", "==", device.userId)
+        .where("userId", "==", deviceInfo.userId)
         .where("timestamp", ">=", startOfMonth)
         .count()
         .get();
@@ -136,9 +148,9 @@ export async function POST(req: NextRequest) {
 
       const ref = db.collection("notifications").doc();
       batch.set(ref, {
-        userId:     device.userId,
-        deviceId:   deviceDoc.id,
-        deviceName: device.name ?? null,
+        userId:     deviceInfo.userId,
+        deviceId:   deviceInfo.docPath.split("/").pop(),
+        deviceName: deviceInfo.name,
         source:     "android",
         app,
         text,
@@ -150,8 +162,7 @@ export async function POST(req: NextRequest) {
     }
     await batch.commit();
 
-    // Actualizar lastSeen del dispositivo
-    await deviceDoc.ref.update({ lastSeen: FieldValue.serverTimestamp() });
+    await deviceDocRef!.update({ lastSeen: FieldValue.serverTimestamp() });
 
     return NextResponse.json({ ok: true, saved: toSave.length });
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { use, useEffect, useState, useMemo } from "react";
-import { collection, query, where, orderBy, onSnapshot, doc, getDoc } from "firebase/firestore";
+import { use, useEffect, useState, useMemo, useRef } from "react";
+import { collection, query, where, orderBy, onSnapshot, doc, getDoc, getDocs, limit, startAfter, getAggregateFromServer, sum, Timestamp, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Notification, BranchConfig } from "@/lib/types";
 import { formatCurrency, formatDateShort } from "@/lib/utils";
@@ -19,17 +19,22 @@ function toLocalDateString(date: Date): string {
   return date.toLocaleDateString("en-CA");
 }
 
-function isSameDay(ts: { toDate?: () => Date } | Date, dateStr: string): boolean {
-  const date = ts instanceof Date ? ts : ts.toDate?.() ?? new Date(0);
-  return toLocalDateString(date) === dateStr;
-}
 
 export default function PublicViewPage({ params }: { params: Promise<{ uid: string }> }) {
   const { uid } = use(params);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [olderNotifs, setOlderNotifs] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [selectedDate, setSelectedDate] = useState(toLocalDateString(new Date()));
   const [search, setSearch] = useState("");
+  const [dayTotal, setDayTotal] = useState(0);
+  const [branchTotals, setBranchTotals] = useState<Record<string, number>>({});
+  const [unassignedTotal, setUnassignedTotal] = useState(0);
+  const lastVisibleRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const lastOlderRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const latestIdRef = useRef<string | null>(null);
 
   // Branch state
   const [branchConfig, setBranchConfig] = useState<BranchConfig | null>(null);
@@ -47,18 +52,105 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
     });
   }, [uid]);
 
+  const PAGE_SIZE = 50;
+
+  async function fetchAggregates(start: Timestamp, end: Timestamp, config: BranchConfig | null) {
+    const baseConstraints = [
+      where("userId", "==", uid),
+      where("timestamp", ">=", start),
+      where("timestamp", "<=", end),
+    ];
+
+    const globalSnap = await getAggregateFromServer(
+      query(collection(db, "notifications"), ...baseConstraints),
+      { total: sum("amount") }
+    );
+    setDayTotal(globalSnap.data().total ?? 0);
+
+    if (config?.enabled) {
+      const unassignedSnap = await getAggregateFromServer(
+        query(collection(db, "notifications"), ...baseConstraints, where("branchId", "==", null)),
+        { total: sum("amount") }
+      );
+      setUnassignedTotal(unassignedSnap.data().total ?? 0);
+
+      const totals: Record<string, number> = {};
+      await Promise.all(
+        config.branches.map(async (b) => {
+          const snap = await getAggregateFromServer(
+            query(collection(db, "notifications"), ...baseConstraints, where("branchId", "==", b.id)),
+            { total: sum("amount") }
+          );
+          totals[b.id] = snap.data().total ?? 0;
+        })
+      );
+      setBranchTotals(totals);
+    }
+  }
+
   useEffect(() => {
+    setLoading(true);
+    setOlderNotifs([]);
+    lastVisibleRef.current = null;
+    lastOlderRef.current = null;
+    latestIdRef.current = null;
+
+    const start = Timestamp.fromDate(new Date(selectedDate + "T00:00:00"));
+    const end = Timestamp.fromDate(new Date(selectedDate + "T23:59:59.999"));
+
+    fetchAggregates(start, end, branchConfig);
+
     const q = query(
       collection(db, "notifications"),
       where("userId", "==", uid),
-      orderBy("timestamp", "desc")
+      where("timestamp", ">=", start),
+      where("timestamp", "<=", end),
+      orderBy("timestamp", "desc"),
+      limit(PAGE_SIZE)
     );
     const unsub = onSnapshot(q, (snap) => {
       setNotifications(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Notification[]);
+      setHasMore(snap.docs.length === PAGE_SIZE);
+      lastVisibleRef.current = snap.docs[snap.docs.length - 1] ?? null;
       setLoading(false);
+      // Re-calcular totales cuando llega cobro nuevo O cuando se asigna sucursal
+      const latestId = snap.docs[0]?.id ?? null;
+      const hasBranchChange = snap.docChanges().some(
+        (c) => c.type === "modified" && "branchId" in c.doc.data()
+      );
+      if (latestId !== latestIdRef.current || hasBranchChange) {
+        latestIdRef.current = latestId;
+        fetchAggregates(start, end, branchConfig);
+      }
     });
     return unsub;
-  }, [uid]);
+  }, [uid, selectedDate, branchConfig]);
+
+  async function loadMore() {
+    if (loadingMore) return;
+    const cursor = lastOlderRef.current ?? lastVisibleRef.current;
+    if (!cursor) return;
+    setLoadingMore(true);
+    const start = Timestamp.fromDate(new Date(selectedDate + "T00:00:00"));
+    const end = Timestamp.fromDate(new Date(selectedDate + "T23:59:59.999"));
+    const snap = await getDocs(query(
+      collection(db, "notifications"),
+      where("userId", "==", uid),
+      where("timestamp", ">=", start),
+      where("timestamp", "<=", end),
+      orderBy("timestamp", "desc"),
+      startAfter(cursor),
+      limit(PAGE_SIZE)
+    ));
+    const newItems = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Notification[];
+    setOlderNotifs((prev) => {
+      const ids = new Set(prev.map((n) => n.id));
+      return [...prev, ...newItems.filter((n) => !ids.has(n.id))];
+    });
+    setHasMore(snap.docs.length === PAGE_SIZE);
+    lastOlderRef.current = snap.docs[snap.docs.length - 1] ?? null;
+    setLoadingMore(false);
+  }
 
   function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -86,25 +178,22 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
     setAssigning(null);
   }
 
-  const filtered = useMemo(() => {
-    return notifications.filter((n) => {
-      if (!n.timestamp) return false;
-      if (!isSameDay(n.timestamp, selectedDate)) return false;
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        return (
-          n.text.toLowerCase().includes(q) ||
-          n.app.toLowerCase().includes(q) ||
-          (n.deviceName ?? "").toLowerCase().includes(q)
-        );
-      }
-      return true;
-    });
-  }, [notifications, selectedDate, search]);
+  const allNotifications = useMemo(() => {
+    const ids = new Set(notifications.map((n) => n.id));
+    return [...notifications, ...olderNotifs.filter((n) => !ids.has(n.id))];
+  }, [notifications, olderNotifs]);
 
-  const total = filtered.reduce((s, n) => s + (n.amount ?? 0), 0);
+  const filtered = useMemo(() => {
+    if (!search.trim()) return allNotifications;
+    const q = search.toLowerCase();
+    return allNotifications.filter((n) =>
+      n.text.toLowerCase().includes(q) ||
+      n.app.toLowerCase().includes(q) ||
+      (n.deviceName ?? "").toLowerCase().includes(q)
+    );
+  }, [allNotifications, search]);
+
   const unassigned = filtered.filter((n) => !n.branchId);
-  const unassignedTotal = unassigned.reduce((s, n) => s + (n.amount ?? 0), 0);
   const isToday = selectedDate === toLocalDateString(new Date());
   const branchMode = branchConfig?.enabled && activeBranch && activeBranch !== "__selecting__" && activeBranch !== "__readonly__";
   const readOnly = activeBranch === "__readonly__";
@@ -209,7 +298,7 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
           {/* Total global */}
           <div className={`bg-white rounded-2xl border border-gray-200 p-5 text-center ${!(branchMode || readOnly) ? "col-span-full" : ""}`}>
             <p className="text-xs text-gray-400 mb-1 uppercase tracking-wide">Total global</p>
-            <p className="text-3xl font-bold text-gray-900">{formatCurrency(total)}</p>
+            <p className="text-3xl font-bold text-gray-900">{formatCurrency(dayTotal)}</p>
             <p className="text-xs text-gray-400 mt-1">{filtered.length} cobros</p>
           </div>
 
@@ -218,22 +307,21 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
             <div className="bg-white rounded-2xl border border-gray-200 p-5 text-center">
               <p className="text-xs text-gray-400 mb-1 uppercase tracking-wide">Sin asignar</p>
               <p className="text-2xl font-bold text-gray-500">{formatCurrency(unassignedTotal)}</p>
-              <p className="text-xs text-gray-400 mt-1">{unassigned.length} cobros</p>
+              <p className="text-xs text-gray-400 mt-1">{unassigned.length} cobros cargados</p>
             </div>
           )}
 
           {/* Por sucursal */}
           {(branchMode || readOnly) && branchConfig!.branches.map((b) => {
             const bNotifs = filtered.filter(n => n.branchId === b.id);
-            const bTotal = bNotifs.reduce((s, n) => s + (n.amount ?? 0), 0);
             return (
               <div key={b.id} className="bg-white rounded-2xl border-2 p-5 text-center" style={{ borderColor: b.color + "40" }}>
                 <div className="flex items-center justify-center gap-1.5 mb-1">
                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: b.color }} />
                   <p className="text-xs font-medium" style={{ color: b.color }}>{b.name}</p>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(bTotal)}</p>
-                <p className="text-xs text-gray-400 mt-1">{bNotifs.length} cobros</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(branchTotals[b.id] ?? 0)}</p>
+                <p className="text-xs text-gray-400 mt-1">{bNotifs.length} cobros cargados</p>
               </div>
             );
           })}
@@ -387,6 +475,26 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Cargar más */}
+          {!loading && (hasMore || loadingMore) && !search.trim() && (
+            <div className="px-4 py-4 border-t border-gray-100 flex justify-center">
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              >
+                {loadingMore ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                    Cargando...
+                  </>
+                ) : (
+                  "Ver más cobros"
+                )}
+              </button>
             </div>
           )}
         </div>

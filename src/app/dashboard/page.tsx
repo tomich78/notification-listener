@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import {
   collection,
   query,
@@ -14,7 +14,13 @@ import {
   getDoc,
   getDocs,
   limit,
+  startAfter,
   writeBatch,
+  getAggregateFromServer,
+  sum,
+  count,
+  type QueryDocumentSnapshot,
+  type DocumentData,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
@@ -61,11 +67,21 @@ function nowLocalDatetime() {
 }
 
 const EMPTY_FORM: NotifForm = { text: "", app: "", amount: "", datetime: nowLocalDatetime() };
+const PAGE_SIZE = 50;
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [olderNotifs, setOlderNotifs] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const lastVisibleRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const lastOlderRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const latestIdRef = useRef<string | null>(null);
+  const [todayTotal, setTodayTotal] = useState(0);
+  const [todayCount, setTodayCount] = useState(0);
+  const [historicTotal, setHistoricTotal] = useState(0);
   const [branchConfig, setBranchConfig] = useState<BranchConfig | null>(null);
   const [userPlan, setUserPlan] = useState<"free" | "pro">("free");
   const [notifLimit, setNotifLimit] = useState<number>(100);
@@ -131,24 +147,93 @@ export default function DashboardPage() {
     }
   }, [user]);
 
+  async function fetchAggregates(uid: string) {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayQ = query(
+      collection(db, "notifications"),
+      where("userId", "==", uid),
+      where("timestamp", ">=", todayStart)
+    );
+    const allQ = query(
+      collection(db, "notifications"),
+      where("userId", "==", uid)
+    );
+
+    const [todaySnap, allSnap] = await Promise.all([
+      getAggregateFromServer(todayQ, { total: sum("amount"), cobros: count() }),
+      getAggregateFromServer(allQ, { total: sum("amount") }),
+    ]);
+
+    setTodayTotal(todaySnap.data().total ?? 0);
+    setTodayCount(todaySnap.data().cobros ?? 0);
+    setHistoricTotal(allSnap.data().total ?? 0);
+  }
+
   useEffect(() => {
     if (!user) return;
+    // Reset older pages when user changes
+    setOlderNotifs([]);
+    lastVisibleRef.current = null;
+    lastOlderRef.current = null;
+    latestIdRef.current = null;
+
+    fetchAggregates(user.uid);
+
     const q = query(
       collection(db, "notifications"),
       where("userId", "==", user.uid),
-      orderBy("timestamp", "desc")
+      orderBy("timestamp", "desc"),
+      limit(PAGE_SIZE)
     );
     const unsub = onSnapshot(q, (snap) => {
       setNotifications(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Notification[]);
+      setHasMore(snap.docs.length === PAGE_SIZE);
+      lastVisibleRef.current = snap.docs[snap.docs.length - 1] ?? null;
       setLoading(false);
+      // Re-calcular totales cuando llega una notificación nueva
+      const latestId = snap.docs[0]?.id ?? null;
+      if (latestId !== latestIdRef.current) {
+        latestIdRef.current = latestId;
+        fetchAggregates(user.uid);
+      }
     });
     return unsub;
   }, [user]);
 
+  async function loadMore() {
+    if (!user || loadingMore) return;
+    const cursor = lastOlderRef.current ?? lastVisibleRef.current;
+    if (!cursor) return;
+    setLoadingMore(true);
+    const q = query(
+      collection(db, "notifications"),
+      where("userId", "==", user.uid),
+      orderBy("timestamp", "desc"),
+      startAfter(cursor),
+      limit(PAGE_SIZE)
+    );
+    const snap = await getDocs(q);
+    const newItems = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Notification[];
+    setOlderNotifs((prev) => {
+      const ids = new Set(prev.map((n) => n.id));
+      return [...prev, ...newItems.filter((n) => !ids.has(n.id))];
+    });
+    setHasMore(snap.docs.length === PAGE_SIZE);
+    lastOlderRef.current = snap.docs[snap.docs.length - 1] ?? null;
+    setLoadingMore(false);
+  }
+
+  const allNotifications = useMemo(() => {
+    const ids = new Set(notifications.map((n) => n.id));
+    return [...notifications, ...olderNotifs.filter((n) => !ids.has(n.id))];
+  }, [notifications, olderNotifs]);
+
   const filtered = useMemo(() => {
-    let base = notifications;
-    if (filter === "today") base = notifications.filter((n) => n.timestamp && isToday(n.timestamp));
-    else if (filter === "date") base = notifications.filter((n) => n.timestamp && isSameDay(n.timestamp, selectedDate));
+    let base = allNotifications;
+    if (filter === "today") base = allNotifications.filter((n) => n.timestamp && isToday(n.timestamp));
+    else if (filter === "date") base = allNotifications.filter((n) => n.timestamp && isSameDay(n.timestamp, selectedDate));
     if (search.trim()) {
       const q = search.toLowerCase();
       base = base.filter((n) =>
@@ -158,24 +243,20 @@ export default function DashboardPage() {
       );
     }
     return base;
-  }, [notifications, filter, selectedDate, search]);
+  }, [allNotifications, filter, selectedDate, search]);
 
   // Resetear selección cuando cambia el filtro
   useEffect(() => { setSelected(new Set()); }, [filter, selectedDate, search]);
-
-  const todayTotal = filtered
-    .filter((n) => n.amount !== null)
-    .reduce((sum, n) => sum + (n.amount ?? 0), 0);
 
   const monthNotifCount = useMemo(() => {
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
-    return notifications.filter((n) => {
+    return allNotifications.filter((n) => {
       const ts = n.timestamp instanceof Date ? n.timestamp : n.timestamp?.toDate?.();
       return ts && ts >= startOfMonth;
     }).length;
-  }, [notifications]);
+  }, [allNotifications]);
 
   // — Selección —
   const allSelected = filtered.length > 0 && filtered.every((n) => selected.has(n.id));
@@ -327,13 +408,8 @@ export default function DashboardPage() {
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <StatCard icon={<TrendingUp className="w-4 h-4 text-green-600" />} label="Total hoy" value={formatCurrency(todayTotal)} color="bg-green-50" />
-        <StatCard icon={<Bell className="w-4 h-4 text-blue-600" />} label="Cobros hoy" value={String(filtered.length)} color="bg-blue-50" />
-        <StatCard
-          icon={<TrendingUp className="w-4 h-4 text-purple-600" />}
-          label="Total histórico"
-          value={formatCurrency(notifications.filter((n) => n.amount !== null).reduce((s, n) => s + (n.amount ?? 0), 0))}
-          color="bg-purple-50"
-        />
+        <StatCard icon={<Bell className="w-4 h-4 text-blue-600" />} label="Cobros hoy" value={String(todayCount)} color="bg-blue-50" />
+        <StatCard icon={<TrendingUp className="w-4 h-4 text-purple-600" />} label="Total histórico" value={formatCurrency(historicTotal)} color="bg-purple-50" />
       </div>
 
       {/* Table */}
@@ -409,7 +485,7 @@ export default function DashboardPage() {
         ) : filtered.length === 0 ? (
           <EmptyState onAdd={openAdd} />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" id="notif-table">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
@@ -496,6 +572,26 @@ export default function DashboardPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Cargar más */}
+        {!loading && (hasMore || loadingMore) && filter === "all" && !search.trim() && (
+          <div className="px-6 py-4 border-t border-gray-100 flex justify-center">
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            >
+              {loadingMore ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                  Cargando...
+                </>
+              ) : (
+                "Cargar más notificaciones"
+              )}
+            </button>
           </div>
         )}
       </div>
