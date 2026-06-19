@@ -299,23 +299,7 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
               {isToday ? "Cobros de hoy" : "Cobros"}
             </span>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleManualRefresh}
-              disabled={refreshing}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium text-gray-500 hover:bg-gray-100 transition-colors disabled:opacity-60"
-              title="Actualizar totales"
-            >
-              <div className="relative flex items-center justify-center w-2 h-2">
-                <span className="absolute w-2 h-2 rounded-full bg-green-500 animate-ping" />
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-              </div>
-              En vivo
-              <RefreshCw className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`} />
-              {!refreshing && secondsAgo > 0 && (
-                <span className="text-gray-400">· hace {secondsAgo < 60 ? `${secondsAgo}s` : `${Math.floor(secondsAgo / 60)}m`}</span>
-              )}
-            </button>
+          <div className="flex items-center gap-2">
             {currentBranch && (
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-white" style={{ backgroundColor: currentBranch.color }}>
                 <div className="w-1.5 h-1.5 rounded-full bg-white/70" />
@@ -329,7 +313,29 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto px-6 py-8 space-y-4">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-4">
+
+        {/* Indicador en vivo */}
+        <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="relative flex items-center justify-center w-2.5 h-2.5">
+              <span className="absolute w-2.5 h-2.5 rounded-full bg-green-500 animate-ping" />
+              <span className="w-2 h-2 rounded-full bg-green-500" />
+            </div>
+            <span className="text-sm font-medium text-green-800">Actualizado en vivo</span>
+            {!refreshing && secondsAgo > 0 && (
+              <span className="text-xs text-green-600">· hace {secondsAgo < 60 ? `${secondsAgo}s` : `${Math.floor(secondsAgo / 60)}m`}</span>
+            )}
+          </div>
+          <button
+            onClick={handleManualRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-green-300 rounded-lg text-xs font-medium text-green-700 hover:bg-green-100 transition-colors disabled:opacity-60"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Actualizando..." : "Actualizar ahora"}
+          </button>
+        </div>
 
         {/* Totales */}
         <div className={`grid gap-3 ${(branchMode || readOnly) ? "grid-cols-2 sm:grid-cols-3" : ""}`}>

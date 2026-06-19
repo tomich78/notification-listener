@@ -394,26 +394,30 @@ export default function DashboardPage() {
 
   return (
     <div className="p-4 md:p-8">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-1">Tus cobros en tiempo real</p>
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-sm text-gray-500 mt-1">Tus cobros en tiempo real</p>
+      </div>
+
+      {/* Indicador en vivo */}
+      <div className="mb-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div className="relative flex items-center justify-center w-2.5 h-2.5">
+            <span className="absolute w-2.5 h-2.5 rounded-full bg-green-500 animate-ping" />
+            <span className="w-2 h-2 rounded-full bg-green-500" />
+          </div>
+          <span className="text-sm font-medium text-green-800">Actualizado en vivo</span>
+          {!refreshing && secondsAgo > 0 && (
+            <span className="text-xs text-green-600">· hace {secondsAgo < 60 ? `${secondsAgo}s` : `${Math.floor(secondsAgo / 60)}m`}</span>
+          )}
         </div>
         <button
           onClick={handleManualRefresh}
           disabled={refreshing}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium text-gray-500 hover:bg-gray-100 transition-colors disabled:opacity-60"
-          title="Actualizar totales"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-green-300 rounded-lg text-xs font-medium text-green-700 hover:bg-green-100 transition-colors disabled:opacity-60"
         >
-          <div className="relative flex items-center justify-center w-2 h-2">
-            <span className="absolute w-2 h-2 rounded-full bg-green-500 animate-ping" />
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-          </div>
-          En vivo
-          <RefreshCw className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`} />
-          {!refreshing && secondsAgo > 0 && (
-            <span className="text-gray-400">· hace {secondsAgo < 60 ? `${secondsAgo}s` : `${Math.floor(secondsAgo / 60)}m`}</span>
-          )}
+          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+          {refreshing ? "Actualizando..." : "Actualizar ahora"}
         </button>
       </div>
 
