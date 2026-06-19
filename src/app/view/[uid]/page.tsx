@@ -5,7 +5,7 @@ import { collection, query, where, orderBy, onSnapshot, doc, getDoc, getDocs, li
 import { db } from "@/lib/firebase";
 import { Notification, BranchConfig } from "@/lib/types";
 import { formatCurrency, formatDateShort } from "@/lib/utils";
-import { Bell, Globe, Smartphone, Search, Calendar, Lock, ChevronDown } from "lucide-react";
+import { Bell, Globe, Smartphone, Search, Calendar, Lock, ChevronDown, RefreshCw } from "lucide-react";
 import Image from "next/image";
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -36,6 +36,9 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
   const lastVisibleRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
   const lastOlderRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
   const latestIdRef = useRef<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [secondsAgo, setSecondsAgo] = useState(0);
 
   // Branch state
   const [branchConfig, setBranchConfig] = useState<BranchConfig | null>(null);
@@ -88,6 +91,7 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
       );
       setBranchTotals(totals);
     }
+    setLastUpdated(new Date());
   }
 
   useEffect(() => {
@@ -127,6 +131,22 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
     });
     return unsub;
   }, [uid, selectedDate, branchConfig]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (lastUpdated) setSecondsAgo(Math.floor((Date.now() - lastUpdated.getTime()) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [lastUpdated]);
+
+  async function handleManualRefresh() {
+    if (refreshing) return;
+    setRefreshing(true);
+    const start = Timestamp.fromDate(new Date(selectedDate + "T00:00:00"));
+    const end = Timestamp.fromDate(new Date(selectedDate + "T23:59:59.999"));
+    await fetchAggregates(start, end, branchConfig);
+    setRefreshing(false);
+  }
 
   async function loadMore() {
     if (loadingMore) return;
@@ -279,7 +299,23 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
               {isToday ? "Cobros de hoy" : "Cobros"}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleManualRefresh}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium text-gray-500 hover:bg-gray-100 transition-colors disabled:opacity-60"
+              title="Actualizar totales"
+            >
+              <div className="relative flex items-center justify-center w-2 h-2">
+                <span className="absolute w-2 h-2 rounded-full bg-green-500 animate-ping" />
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+              </div>
+              En vivo
+              <RefreshCw className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`} />
+              {!refreshing && secondsAgo > 0 && (
+                <span className="text-gray-400">· hace {secondsAgo < 60 ? `${secondsAgo}s` : `${Math.floor(secondsAgo / 60)}m`}</span>
+              )}
+            </button>
             {currentBranch && (
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-white" style={{ backgroundColor: currentBranch.color }}>
                 <div className="w-1.5 h-1.5 rounded-full bg-white/70" />

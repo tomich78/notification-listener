@@ -26,7 +26,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Notification, BranchConfig } from "@/lib/types";
 import { formatCurrency, formatDateShort, isToday, extractAmount } from "@/lib/utils";
-import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar, AlertTriangle, FileDown } from "lucide-react";
+import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar, AlertTriangle, FileDown, RefreshCw } from "lucide-react";
 import OnboardingWizard from "@/components/OnboardingWizard";
 import ReportModal from "@/components/ReportModal";
 
@@ -79,6 +79,9 @@ export default function DashboardPage() {
   const lastVisibleRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
   const lastOlderRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
   const latestIdRef = useRef<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [secondsAgo, setSecondsAgo] = useState(0);
   const [todayTotal, setTodayTotal] = useState(0);
   const [todayCount, setTodayCount] = useState(0);
   const [historicTotal, setHistoricTotal] = useState(0);
@@ -170,9 +173,24 @@ export default function DashboardPage() {
       setMonthCount(monthSnap.data().cobros ?? 0);
       setHistoricTotal(allSnap.data().total ?? 0);
       setHistoricCount(allSnap.data().cobros ?? 0);
+      setLastUpdated(new Date());
     } catch (err) {
       console.error("[fetchAggregates] Error:", err);
     }
+  }
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (lastUpdated) setSecondsAgo(Math.floor((Date.now() - lastUpdated.getTime()) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [lastUpdated]);
+
+  async function handleManualRefresh() {
+    if (!user || refreshing) return;
+    setRefreshing(true);
+    await fetchAggregates(user.uid);
+    setRefreshing(false);
   }
 
   useEffect(() => {
@@ -376,14 +394,32 @@ export default function DashboardPage() {
 
   return (
     <div className="p-4 md:p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-1">Tus cobros en tiempo real</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">Tus cobros en tiempo real</p>
+        </div>
+        <button
+          onClick={handleManualRefresh}
+          disabled={refreshing}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium text-gray-500 hover:bg-gray-100 transition-colors disabled:opacity-60"
+          title="Actualizar totales"
+        >
+          <div className="relative flex items-center justify-center w-2 h-2">
+            <span className="absolute w-2 h-2 rounded-full bg-green-500 animate-ping" />
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+          </div>
+          En vivo
+          <RefreshCw className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`} />
+          {!refreshing && secondsAgo > 0 && (
+            <span className="text-gray-400">· hace {secondsAgo < 60 ? `${secondsAgo}s` : `${Math.floor(secondsAgo / 60)}m`}</span>
+          )}
+        </button>
       </div>
 
       {/* Límite free */}
       {userPlan === "free" && (
-        <div className={`mb-6 rounded-xl border px-4 py-3 flex items-center gap-3 ${monthNotifCount >= notifLimit ? "bg-red-50 border-red-200" : monthNotifCount >= notifLimit * 0.8 ? "bg-yellow-50 border-yellow-200" : "bg-gray-50 border-gray-200"}`}>
+        <div className={`mb-6 rounded-xl border px-4 py-3 flex items-center gap-3 ${monthCount >= notifLimit ? "bg-red-50 border-red-200" : monthCount >= notifLimit * 0.8 ? "bg-yellow-50 border-yellow-200" : "bg-gray-50 border-gray-200"}`}>
           {monthCount >= notifLimit * 0.8 && (
             <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${monthCount >= notifLimit ? "text-red-500" : "text-yellow-500"}`} />
           )}
