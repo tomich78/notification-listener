@@ -83,6 +83,7 @@ export default function DashboardPage() {
   const [todayCount, setTodayCount] = useState(0);
   const [historicTotal, setHistoricTotal] = useState(0);
   const [historicCount, setHistoricCount] = useState(0);
+  const [monthCount, setMonthCount] = useState(0);
   const [branchConfig, setBranchConfig] = useState<BranchConfig | null>(null);
   const [userPlan, setUserPlan] = useState<"free" | "pro">("free");
   const [notifLimit, setNotifLimit] = useState<number>(100);
@@ -150,26 +151,23 @@ export default function DashboardPage() {
 
   async function fetchAggregates(uid: string) {
     try {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
+      const now = new Date();
+      const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      const todayQ = query(
-        collection(db, "notifications"),
-        where("userId", "==", uid),
-        where("timestamp", ">=", todayStart)
-      );
-      const allQ = query(
-        collection(db, "notifications"),
-        where("userId", "==", uid)
-      );
+      const todayQ = query(collection(db, "notifications"), where("userId", "==", uid), where("timestamp", ">=", todayStart));
+      const monthQ = query(collection(db, "notifications"), where("userId", "==", uid), where("timestamp", ">=", monthStart));
+      const allQ   = query(collection(db, "notifications"), where("userId", "==", uid));
 
-      const [todaySnap, allSnap] = await Promise.all([
+      const [todaySnap, monthSnap, allSnap] = await Promise.all([
         getAggregateFromServer(todayQ, { total: sum("amount"), cobros: count() }),
-        getAggregateFromServer(allQ, { total: sum("amount"), cobros: count() }),
+        getAggregateFromServer(monthQ, { cobros: count() }),
+        getAggregateFromServer(allQ,   { total: sum("amount"), cobros: count() }),
       ]);
 
       setTodayTotal(todaySnap.data().total ?? 0);
       setTodayCount(todaySnap.data().cobros ?? 0);
+      setMonthCount(monthSnap.data().cobros ?? 0);
       setHistoricTotal(allSnap.data().total ?? 0);
       setHistoricCount(allSnap.data().cobros ?? 0);
     } catch (err) {
@@ -386,24 +384,24 @@ export default function DashboardPage() {
       {/* Límite free */}
       {userPlan === "free" && (
         <div className={`mb-6 rounded-xl border px-4 py-3 flex items-center gap-3 ${monthNotifCount >= notifLimit ? "bg-red-50 border-red-200" : monthNotifCount >= notifLimit * 0.8 ? "bg-yellow-50 border-yellow-200" : "bg-gray-50 border-gray-200"}`}>
-          {monthNotifCount >= notifLimit * 0.8 && (
-            <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${monthNotifCount >= notifLimit ? "text-red-500" : "text-yellow-500"}`} />
+          {monthCount >= notifLimit * 0.8 && (
+            <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${monthCount >= notifLimit ? "text-red-500" : "text-yellow-500"}`} />
           )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs font-medium text-gray-700">Notificaciones este mes</span>
-              <span className={`text-xs font-semibold ${monthNotifCount >= notifLimit ? "text-red-600" : "text-gray-600"}`}>
-                {monthNotifCount} / {notifLimit}
+              <span className={`text-xs font-semibold ${monthCount >= notifLimit ? "text-red-600" : "text-gray-600"}`}>
+                {monthCount} / {notifLimit}
               </span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-1.5">
               <div
-                className={`h-1.5 rounded-full transition-all ${monthNotifCount >= notifLimit ? "bg-red-500" : monthNotifCount >= notifLimit * 0.8 ? "bg-yellow-500" : "bg-blue-500"}`}
-                style={{ width: `${Math.min(100, (monthNotifCount / notifLimit) * 100)}%` }}
+                className={`h-1.5 rounded-full transition-all ${monthCount >= notifLimit ? "bg-red-500" : monthCount >= notifLimit * 0.8 ? "bg-yellow-500" : "bg-blue-500"}`}
+                style={{ width: `${Math.min(100, (monthCount / notifLimit) * 100)}%` }}
               />
             </div>
           </div>
-          {monthNotifCount >= notifLimit * 0.8 && (
+          {monthCount >= notifLimit * 0.8 && (
             <a href="/upgrade" className="flex-shrink-0 text-xs font-medium text-blue-600 hover:underline">
               Mejorar plan →
             </a>
@@ -415,7 +413,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <StatCard icon={<TrendingUp className="w-4 h-4 text-green-600" />} label="Total hoy" value={formatCurrency(todayTotal)} sub={`${todayCount} cobros`} color="bg-green-50" />
         <StatCard icon={<Bell className="w-4 h-4 text-blue-600" />} label="Total histórico" value={formatCurrency(historicTotal)} sub={`${historicCount} cobros`} color="bg-blue-50" />
-        <StatCard icon={<TrendingUp className="w-4 h-4 text-purple-600" />} label="Cobros este mes" value={String(monthNotifCount)} sub={userPlan === "free" ? `límite ${notifLimit}` : undefined} color="bg-purple-50" />
+        <StatCard icon={<TrendingUp className="w-4 h-4 text-purple-600" />} label="Cobros este mes" value={String(monthCount)} sub={userPlan === "free" ? `límite ${notifLimit}` : undefined} color="bg-purple-50" />
       </div>
 
       {/* Table */}

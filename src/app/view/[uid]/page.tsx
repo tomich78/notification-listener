@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect, useState, useMemo, useRef } from "react";
-import { collection, query, where, orderBy, onSnapshot, doc, getDoc, getDocs, limit, startAfter, getAggregateFromServer, sum, Timestamp, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, doc, getDoc, getDocs, limit, startAfter, getAggregateFromServer, sum, count, Timestamp, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Notification, BranchConfig } from "@/lib/types";
 import { formatCurrency, formatDateShort } from "@/lib/utils";
@@ -30,6 +30,7 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
   const [selectedDate, setSelectedDate] = useState(toLocalDateString(new Date()));
   const [search, setSearch] = useState("");
   const [dayTotal, setDayTotal] = useState(0);
+  const [dayCount, setDayCount] = useState(0);
   const [branchTotals, setBranchTotals] = useState<Record<string, number>>({});
   const [unassignedTotal, setUnassignedTotal] = useState(0);
   const lastVisibleRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
@@ -63,9 +64,10 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
 
     const globalSnap = await getAggregateFromServer(
       query(collection(db, "notifications"), ...baseConstraints),
-      { total: sum("amount") }
+      { total: sum("amount"), cobros: count() }
     );
     setDayTotal(globalSnap.data().total ?? 0);
+    setDayCount(globalSnap.data().cobros ?? 0);
 
     if (config?.enabled) {
       const unassignedSnap = await getAggregateFromServer(
@@ -299,7 +301,7 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
           <div className={`bg-white rounded-2xl border border-gray-200 p-5 text-center ${!(branchMode || readOnly) ? "col-span-full" : ""}`}>
             <p className="text-xs text-gray-400 mb-1 uppercase tracking-wide">Total global</p>
             <p className="text-3xl font-bold text-gray-900">{formatCurrency(dayTotal)}</p>
-            <p className="text-xs text-gray-400 mt-1">{filtered.length} cobros</p>
+            <p className="text-xs text-gray-400 mt-1">{dayCount} cobros</p>
           </div>
 
           {/* Sin asignar */}
