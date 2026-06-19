@@ -82,6 +82,7 @@ export default function DashboardPage() {
   const [todayTotal, setTodayTotal] = useState(0);
   const [todayCount, setTodayCount] = useState(0);
   const [historicTotal, setHistoricTotal] = useState(0);
+  const [historicCount, setHistoricCount] = useState(0);
   const [branchConfig, setBranchConfig] = useState<BranchConfig | null>(null);
   const [userPlan, setUserPlan] = useState<"free" | "pro">("free");
   const [notifLimit, setNotifLimit] = useState<number>(100);
@@ -148,27 +149,32 @@ export default function DashboardPage() {
   }, [user]);
 
   async function fetchAggregates(uid: string) {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    try {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
 
-    const todayQ = query(
-      collection(db, "notifications"),
-      where("userId", "==", uid),
-      where("timestamp", ">=", todayStart)
-    );
-    const allQ = query(
-      collection(db, "notifications"),
-      where("userId", "==", uid)
-    );
+      const todayQ = query(
+        collection(db, "notifications"),
+        where("userId", "==", uid),
+        where("timestamp", ">=", todayStart)
+      );
+      const allQ = query(
+        collection(db, "notifications"),
+        where("userId", "==", uid)
+      );
 
-    const [todaySnap, allSnap] = await Promise.all([
-      getAggregateFromServer(todayQ, { total: sum("amount"), cobros: count() }),
-      getAggregateFromServer(allQ, { total: sum("amount") }),
-    ]);
+      const [todaySnap, allSnap] = await Promise.all([
+        getAggregateFromServer(todayQ, { total: sum("amount"), cobros: count() }),
+        getAggregateFromServer(allQ, { total: sum("amount"), cobros: count() }),
+      ]);
 
-    setTodayTotal(todaySnap.data().total ?? 0);
-    setTodayCount(todaySnap.data().cobros ?? 0);
-    setHistoricTotal(allSnap.data().total ?? 0);
+      setTodayTotal(todaySnap.data().total ?? 0);
+      setTodayCount(todaySnap.data().cobros ?? 0);
+      setHistoricTotal(allSnap.data().total ?? 0);
+      setHistoricCount(allSnap.data().cobros ?? 0);
+    } catch (err) {
+      console.error("[fetchAggregates] Error:", err);
+    }
   }
 
   useEffect(() => {
@@ -407,9 +413,9 @@ export default function DashboardPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <StatCard icon={<TrendingUp className="w-4 h-4 text-green-600" />} label="Total hoy" value={formatCurrency(todayTotal)} color="bg-green-50" />
-        <StatCard icon={<Bell className="w-4 h-4 text-blue-600" />} label="Cobros hoy" value={String(todayCount)} color="bg-blue-50" />
-        <StatCard icon={<TrendingUp className="w-4 h-4 text-purple-600" />} label="Total histórico" value={formatCurrency(historicTotal)} color="bg-purple-50" />
+        <StatCard icon={<TrendingUp className="w-4 h-4 text-green-600" />} label="Total hoy" value={formatCurrency(todayTotal)} sub={`${todayCount} cobros`} color="bg-green-50" />
+        <StatCard icon={<Bell className="w-4 h-4 text-blue-600" />} label="Total histórico" value={formatCurrency(historicTotal)} sub={`${historicCount} cobros`} color="bg-blue-50" />
+        <StatCard icon={<TrendingUp className="w-4 h-4 text-purple-600" />} label="Cobros este mes" value={String(monthNotifCount)} sub={userPlan === "free" ? `límite ${notifLimit}` : undefined} color="bg-purple-50" />
       </div>
 
       {/* Table */}
@@ -718,12 +724,13 @@ export default function DashboardPage() {
   );
 }
 
-function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string; color: string }) {
+function StatCard({ icon, label, value, sub, color }: { icon: React.ReactNode; label: string; value: string; sub?: string; color: string }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-5">
       <div className={`w-8 h-8 rounded-lg ${color} flex items-center justify-center mb-3`}>{icon}</div>
       <p className="text-xs text-gray-400 mb-1">{label}</p>
       <p className="text-xl font-bold text-gray-900">{value}</p>
+      {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
     </div>
   );
 }
