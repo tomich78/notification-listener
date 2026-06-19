@@ -103,7 +103,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Filtrar notificaciones que no son cobros reales antes de cualquier lectura extra
+    // El botón "notificación de prueba" de la app siempre pasa, para que el usuario
+    // pueda confirmar que la conexión funciona sin que el filtro la descarte.
     const filtered = incoming.filter((n) => {
+      if (n.app === "NListener Test") return true;
       const text = String(n.text ?? "").trim();
       return text.length > 0 && isPaymentNotification(text);
     });
