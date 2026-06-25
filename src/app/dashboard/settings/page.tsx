@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { deleteUser } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { BranchConfig } from "@/lib/types";
+import { checkPlanExpiry } from "@/lib/utils";
 
 const BRANCH_COLORS = [
   "#3B82F6", "#10B981", "#F59E0B", "#EF4444",
@@ -37,8 +38,12 @@ export default function SettingsPage() {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [userPlan, setUserPlan] = useState<"free" | "pro">("free");
+  const [planExpiresAt, setPlanExpiresAt] = useState<Date | null>(null);
   const [planConfig, setPlanConfig] = useState<PlanConfig>(DEFAULT_CONFIG);
   const [loadingPlan, setLoadingPlan] = useState(true);
+  const [couponCode, setCouponCode] = useState("");
+  const [redeeming, setRedeeming] = useState(false);
+  const [redeemMsg, setRedeemMsg] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [branchConfig, setBranchConfig] = useState<BranchConfig>({
     enabled: false,
     password: "",
@@ -54,10 +59,11 @@ export default function SettingsPage() {
     Promise.all([
       getDoc(doc(db, "users", user.uid)),
       getDoc(doc(db, "config", "plans")),
-    ]).then(([userSnap, configSnap]) => {
+    ]).then(async ([userSnap, configSnap]) => {
       if (userSnap.exists()) {
         const data = userSnap.data();
-        setUserPlan(data.plan ?? "free");
+        setUserPlan(await checkPlanExpiry(db, user.uid, data));
+        setPlanExpiresAt(data.planExpiresAt?.toDate?.() ?? null);
         if (data.branchConfig) setBranchConfig(data.branchConfig);
       }
       if (configSnap.exists()) setPlanConfig(configSnap.data() as PlanConfig);
@@ -127,6 +133,33 @@ export default function SettingsPage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  async function redeemCoupon() {
+    if (!user || !couponCode.trim() || redeeming) return;
+    setRedeeming(true);
+    setRedeemMsg(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/coupons/redeem", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ code: couponCode.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setRedeemMsg({ type: "error", text: data.error ?? "Error al canjear el cupón" });
+      } else {
+        setUserPlan("pro");
+        setPlanExpiresAt(new Date(data.expiresAt));
+        setCouponCode("");
+        setRedeemMsg({ type: "ok", text: "¡Listo! Tenés Plan Pro activado." });
+      }
+    } catch {
+      setRedeemMsg({ type: "error", text: "Error de conexión. Intentá de nuevo." });
+    } finally {
+      setRedeeming(false);
+    }
+  }
+
   const isPro = userPlan === "pro";
 
   return (
@@ -147,6 +180,11 @@ export default function SettingsPage() {
             <p className="text-xs text-white/70">
               Hasta {planConfig.proDeviceLimit} dispositivos · Notificaciones ilimitadas
             </p>
+            {planExpiresAt && (
+              <p className="text-xs text-white/70 mt-1">
+                Activado por cupón · vence el {planExpiresAt.toLocaleDateString("es-AR")}
+              </p>
+            )}
           </section>
         ) : (
           <section className="bg-white rounded-2xl border border-gray-200 p-5 mb-5">
@@ -181,6 +219,33 @@ export default function SettingsPage() {
                   Pasarme a Pro
                 </a>
               </div>
+            </div>
+
+            {/* Canjear cupón */}
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <p className="text-xs font-medium text-gray-700 mb-2">¿Tenés un cupón?</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={couponCode}
+                  onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setRedeemMsg(null); }}
+                  onKeyDown={(e) => e.key === "Enter" && redeemCoupon()}
+                  placeholder="CÓDIGO"
+                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={redeemCoupon}
+                  disabled={redeeming || !couponCode.trim()}
+                  className="px-4 py-2 bg-gray-900 text-white text-xs font-medium rounded-lg hover:bg-gray-800 disabled:opacity-50 transition-colors"
+                >
+                  {redeeming ? "Canjeando..." : "Canjear"}
+                </button>
+              </div>
+              {redeemMsg && (
+                <p className={`text-xs mt-2 ${redeemMsg.type === "ok" ? "text-green-600" : "text-red-600"}`}>
+                  {redeemMsg.text}
+                </p>
+              )}
             </div>
           </section>
         )

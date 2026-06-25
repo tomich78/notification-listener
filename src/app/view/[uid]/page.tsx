@@ -5,8 +5,9 @@ import { collection, query, where, orderBy, onSnapshot, doc, getDoc, getDocs, li
 import { db } from "@/lib/firebase";
 import { Notification, BranchConfig } from "@/lib/types";
 import { formatCurrency, formatDateShort } from "@/lib/utils";
-import { Bell, Globe, Smartphone, Search, Calendar, Lock, ChevronDown, RefreshCw } from "lucide-react";
+import { Bell, Globe, Smartphone, Search, Calendar, Lock, ChevronDown, RefreshCw, FileDown } from "lucide-react";
 import Image from "next/image";
+import ReportModal from "@/components/ReportModal";
 
 const SOURCE_COLORS: Record<string, string> = {
   android: "bg-green-100 text-green-700",
@@ -40,6 +41,9 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
   const [refreshing, setRefreshing] = useState(false);
   const [secondsAgo, setSecondsAgo] = useState(0);
 
+  const [ownerIsPro, setOwnerIsPro] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+
   // Branch state
   const [branchConfig, setBranchConfig] = useState<BranchConfig | null>(null);
   const [password, setPassword] = useState("");
@@ -50,9 +54,14 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
 
   useEffect(() => {
     getDoc(doc(db, "users", uid)).then((snap) => {
-      if (snap.exists() && snap.data().branchConfig?.enabled) {
-        setBranchConfig(snap.data().branchConfig as BranchConfig);
+      if (!snap.exists()) return;
+      const data = snap.data();
+      if (data.branchConfig?.enabled) {
+        setBranchConfig(data.branchConfig as BranchConfig);
       }
+      const expiresAt = data.planExpiresAt?.toDate?.();
+      const isPro = data.plan === "pro" && (!expiresAt || expiresAt > new Date());
+      setOwnerIsPro(isPro);
     });
   }, [uid]);
 
@@ -300,6 +309,15 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {branchConfig?.enabled && ownerIsPro && (
+              <button
+                onClick={() => setShowReport(true)}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                <FileDown className="w-3.5 h-3.5" />
+                PDF
+              </button>
+            )}
             {currentBranch && (
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-white" style={{ backgroundColor: currentBranch.color }}>
                 <div className="w-1.5 h-1.5 rounded-full bg-white/70" />
@@ -547,6 +565,11 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
       {/* Cerrar dropdown al hacer click afuera */}
       {dropdownOpen && (
         <div className="fixed inset-0 z-0" onClick={() => setDropdownOpen(null)} />
+      )}
+
+      {/* Modal reporte PDF */}
+      {showReport && (
+        <ReportModal userId={uid} onClose={() => setShowReport(false)} />
       )}
     </div>
   );

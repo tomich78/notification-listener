@@ -25,7 +25,7 @@ import {
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Notification, BranchConfig } from "@/lib/types";
-import { formatCurrency, formatDateShort, isToday, extractAmount } from "@/lib/utils";
+import { formatCurrency, formatDateShort, isToday, extractAmount, checkPlanExpiry } from "@/lib/utils";
 import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar, AlertTriangle, FileDown, RefreshCw } from "lucide-react";
 import OnboardingWizard from "@/components/OnboardingWizard";
 import ReportModal from "@/components/ReportModal";
@@ -134,10 +134,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user) return;
-    getDoc(doc(db, "users", user.uid)).then((snap) => {
+    getDoc(doc(db, "users", user.uid)).then(async (snap) => {
       const data = snap.data();
       if (data?.branchConfig?.enabled) setBranchConfig(data.branchConfig as BranchConfig);
-      if (data?.plan) setUserPlan(data.plan);
+      setUserPlan(await checkPlanExpiry(db, user.uid, data ?? {}));
     });
     getDoc(doc(db, "config", "plans")).then((snap) => {
       const limit = snap.data()?.freeNotifLimit;

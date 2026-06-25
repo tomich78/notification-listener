@@ -5,6 +5,7 @@ import { collection, query, where, onSnapshot, Timestamp, doc, getDoc } from "fi
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Device } from "@/lib/types";
+import { checkPlanExpiry } from "@/lib/utils";
 import { Smartphone, Plus, Trash2, Wifi, WifiOff, X, Crown, FlaskConical, CheckCircle, AlertCircle, RefreshCw, PowerOff, Power } from "lucide-react";
 import QRCode from "react-qr-code";
 
@@ -33,8 +34,8 @@ export default function DevicesPage() {
     Promise.all([
       getDoc(doc(db, "users", user.uid)),
       getDoc(doc(db, "config", "plans")),
-    ]).then(([userSnap, configSnap]) => {
-      if (userSnap.exists()) setUserPlan(userSnap.data().plan ?? "free");
+    ]).then(async ([userSnap, configSnap]) => {
+      if (userSnap.exists()) setUserPlan(await checkPlanExpiry(db, user.uid, userSnap.data()));
       if (configSnap.exists()) setPlanConfig(configSnap.data() as PlanConfig);
     }).catch(() => {});
 

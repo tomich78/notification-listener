@@ -41,8 +41,18 @@ async function getUserPlan(db: FirebaseFirestore.Firestore, userId: string): Pro
   const cached = userPlanCache.get(userId);
   if (cached && Date.now() < cached.expiry) return cached.plan;
 
-  const snap = await db.collection("users").doc(userId).get();
-  const plan = snap.data()?.plan ?? "free";
+  const ref = db.collection("users").doc(userId);
+  const snap = await ref.get();
+  const data = snap.data();
+  let plan = data?.plan ?? "free";
+
+  // Plan otorgado por cupón vencido — revertir a free
+  const expiresAt = data?.planExpiresAt?.toDate?.();
+  if (plan === "pro" && expiresAt && expiresAt < new Date()) {
+    plan = "free";
+    await ref.update({ plan: "free", planExpiresAt: null });
+  }
+
   userPlanCache.set(userId, { plan, expiry: Date.now() + USER_PLAN_TTL });
   return plan;
 }

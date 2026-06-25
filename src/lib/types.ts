@@ -5,6 +5,7 @@ export interface User {
   email: string;
   displayName: string;
   plan: "free" | "pro";
+  planExpiresAt?: Timestamp | null;
   createdAt: Timestamp;
   publicViewEnabled: boolean;
 }

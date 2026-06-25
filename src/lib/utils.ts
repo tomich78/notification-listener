@@ -1,4 +1,4 @@
-import { Timestamp } from "firebase/firestore";
+import { Timestamp, Firestore, doc, updateDoc } from "firebase/firestore";
 
 export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("es-AR", {
@@ -170,6 +170,23 @@ export function extractAmount(text: string): number | null {
     }
   }
   return null;
+}
+
+// Revierte a "free" en Firestore si el plan Pro vino de un cupón y ya venció.
+// Se llama al cargar el doc de usuario en cualquier pantalla (dashboard, settings, devices, vista pública).
+// Devuelve el plan efectivo, ya corregido.
+export async function checkPlanExpiry(
+  db: Firestore,
+  userId: string,
+  data: { plan?: "free" | "pro"; planExpiresAt?: Timestamp | null }
+): Promise<"free" | "pro"> {
+  const plan = data.plan ?? "free";
+  const expiresAt = data.planExpiresAt?.toDate?.();
+  if (plan === "pro" && expiresAt && expiresAt < new Date()) {
+    await updateDoc(doc(db, "users", userId), { plan: "free", planExpiresAt: null }).catch(() => {});
+    return "free";
+  }
+  return plan;
 }
 
 export function isToday(timestamp: Timestamp | Date): boolean {

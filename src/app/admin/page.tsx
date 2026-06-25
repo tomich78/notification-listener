@@ -3,11 +3,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
-import { Users, Smartphone, BarChart2, Tag, LogOut, ExternalLink } from "lucide-react";
+import { Users, Smartphone, BarChart2, Tag, LogOut, ExternalLink, Ticket, Trash2, Copy, Check } from "lucide-react";
 
 const ADMIN_EMAIL = "tdsdeveloper00@gmail.com";
 
-type Tab = "stats" | "users" | "devices" | "plans";
+type Tab = "stats" | "users" | "devices" | "plans" | "coupons";
 
 interface PlanConfig {
   freeDeviceLimit: number;
@@ -69,6 +69,7 @@ export default function AdminPage() {
               { id: "users", label: "Usuarios", icon: Users },
               { id: "devices", label: "Dispositivos", icon: Smartphone },
               { id: "plans", label: "Planes", icon: Tag },
+              { id: "coupons", label: "Cupones", icon: Ticket },
             ] as { id: Tab; label: string; icon: React.ElementType }[]
           ).map(({ id, label, icon: Icon }) => (
             <button
@@ -92,6 +93,7 @@ export default function AdminPage() {
         {tab === "users"   && <UsersTab   user={user} />}
         {tab === "devices" && <DevicesTab user={user} />}
         {tab === "plans"   && <PlansTab   user={user} />}
+        {tab === "coupons" && <CouponsTab user={user} />}
       </div>
     </div>
   );
@@ -296,6 +298,186 @@ function PlansTab({ user }: { user: { getIdToken: () => Promise<string> } }) {
           {saving ? "Guardando..." : saved ? "¡Guardado!" : "Guardar cambios"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/* ─── Cupones ────────────────────────────────────────────────── */
+interface CouponRow {
+  code: string;
+  durationDays: number;
+  maxUses: number | null;
+  usedCount: number;
+  active: boolean;
+  createdAt: string | null;
+}
+
+function CouponsTab({ user }: { user: { getIdToken: () => Promise<string> } }) {
+  const [coupons, setCoupons] = useState<CouponRow[] | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  // Form de creación
+  const [newCode, setNewCode] = useState("");
+  const [newDuration, setNewDuration] = useState(30);
+  const [newMaxUses, setNewMaxUses] = useState<string>(""); // "" = ilimitado
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+
+  const load = useCallback(() => {
+    user.getIdToken().then((token) =>
+      adminFetch("/api/admin/coupons", token).then(setCoupons)
+    );
+  }, [user]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function createCoupon() {
+    setCreating(true);
+    setCreateError("");
+    try {
+      const token = await user.getIdToken();
+      await adminFetch("/api/admin/coupons", token, {
+        method: "POST",
+        body: JSON.stringify({
+          code: newCode,
+          durationDays: newDuration,
+          maxUses: newMaxUses.trim() ? Number(newMaxUses) : null,
+        }),
+      });
+      setNewCode("");
+      setNewDuration(30);
+      setNewMaxUses("");
+      load();
+    } catch {
+      setCreateError("Error al crear el cupón. Revisá el código (puede que ya exista).");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function toggleActive(code: string, active: boolean) {
+    setSaving(code);
+    const token = await user.getIdToken();
+    await adminFetch("/api/admin/coupons", token, {
+      method: "PATCH",
+      body: JSON.stringify({ code, active: !active }),
+    });
+    setCoupons((prev) => prev?.map((c) => c.code === code ? { ...c, active: !active } : c) ?? null);
+    setSaving(null);
+  }
+
+  async function deleteCoupon(code: string) {
+    if (!confirm(`¿Eliminar el cupón "${code}"? Esta acción no se puede deshacer.`)) return;
+    setSaving(code);
+    const token = await user.getIdToken();
+    await adminFetch(`/api/admin/coupons?code=${encodeURIComponent(code)}`, token, { method: "DELETE" });
+    setCoupons((prev) => prev?.filter((c) => c.code !== code) ?? null);
+    setSaving(null);
+  }
+
+  function copyCode(code: string) {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 1500);
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Crear cupón */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-5 max-w-lg">
+        <h2 className="font-semibold text-gray-900 mb-4">Crear cupón</h2>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Código</label>
+            <input
+              type="text"
+              value={newCode}
+              onChange={(e) => setNewCode(e.target.value.toUpperCase())}
+              placeholder="Ej: VERANO2026"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Duración (días)" value={newDuration} onChange={setNewDuration} />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Usos máx. (vacío = ilimitado)</label>
+              <input
+                type="number"
+                value={newMaxUses}
+                onChange={(e) => setNewMaxUses(e.target.value)}
+                placeholder="Ilimitado"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          {createError && <p className="text-xs text-red-600">{createError}</p>}
+          <button
+            onClick={createCoupon}
+            disabled={creating || !newCode.trim()}
+            className="w-full bg-blue-600 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            {creating ? "Creando..." : "Crear cupón"}
+          </button>
+        </div>
+      </div>
+
+      {/* Lista de cupones */}
+      {!coupons ? <Spinner /> : coupons.length === 0 ? (
+        <p className="text-sm text-gray-400">Todavía no creaste ningún cupón.</p>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <Th>Código</Th><Th>Duración</Th><Th>Usos</Th><Th>Estado</Th><Th>Creado</Th><Th>Acciones</Th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {coupons.map((c) => (
+                <tr key={c.code} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 font-mono font-medium text-gray-900">
+                    <button onClick={() => copyCode(c.code)} className="inline-flex items-center gap-1.5 hover:text-blue-600">
+                      {c.code}
+                      {copiedCode === c.code ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5 text-gray-300" />}
+                    </button>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500">{c.durationDays} días</td>
+                  <td className="px-4 py-3 text-gray-500">{c.usedCount} / {c.maxUses ?? "∞"}</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      c.active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                    }`}>
+                      {c.active ? "Activo" : "Inactivo"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-400 text-xs">
+                    {c.createdAt ? new Date(c.createdAt).toLocaleDateString("es-AR") : "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleActive(c.code, c.active)}
+                        disabled={saving === c.code}
+                        className="text-xs px-3 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        {c.active ? "Desactivar" : "Activar"}
+                      </button>
+                      <button
+                        onClick={() => deleteCoupon(c.code)}
+                        disabled={saving === c.code}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
