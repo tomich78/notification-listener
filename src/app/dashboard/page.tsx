@@ -572,7 +572,7 @@ export default function DashboardPage() {
                       </span>
                     </td>
                     <td className="hidden md:table-cell px-6 py-3 text-gray-600">{n.app}</td>
-                    <td className="px-3 md:px-6 py-3 text-gray-700 max-w-[160px] md:max-w-xs truncate">{n.text}</td>
+                    <td className="px-3 md:px-6 py-3 text-gray-700 max-w-[200px] md:max-w-sm break-words">{n.text}</td>
                     <td className="px-3 md:px-6 py-3 text-right font-medium text-gray-900 whitespace-nowrap">
                       {n.amount !== null ? formatCurrency(n.amount) : "—"}
                     </td>

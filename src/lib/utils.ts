@@ -111,6 +111,22 @@ export function isPaymentNotification(text: string): boolean {
     "disponible para vos",
     "conseguí",
     "arranca",
+    // Egresos / pagos que hizo el usuario (no cobros)
+    "pagaste",
+    "hiciste un pago",
+    "realizaste un pago",
+    "debitamos",
+    "débito de",
+    "se debitó",
+    "cargo de",
+    "se cobró",
+    "compraste",
+    // Saldo / inversiones (no cobros de clientes)
+    "dinero plus",
+    "tu saldo",
+    "disponible para potenciar",
+    "disponible en tu cuenta",
+    "tu cuenta creció",
   ];
 
   // Si contiene alguna palabra de spam → descartar
