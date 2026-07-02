@@ -30,6 +30,7 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
   const [hasMore, setHasMore] = useState(false);
   const [selectedDate, setSelectedDate] = useState(toLocalDateString(new Date()));
   const [search, setSearch] = useState("");
+  const [deviceFilter, setDeviceFilter] = useState("");
   const [dayTotal, setDayTotal] = useState(0);
   const [dayCount, setDayCount] = useState(0);
   const [branchTotals, setBranchTotals] = useState<Record<string, number>>({});
@@ -214,15 +215,25 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
     return [...notifications, ...olderNotifs.filter((n) => !ids.has(n.id))];
   }, [notifications, olderNotifs]);
 
+  const uniqueDevices = useMemo(() => {
+    const names = new Set<string>();
+    for (const n of allNotifications) {
+      if (n.deviceName) names.add(n.deviceName);
+    }
+    return Array.from(names).sort();
+  }, [allNotifications]);
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return allNotifications;
+    let base = allNotifications;
+    if (deviceFilter) base = base.filter((n) => n.deviceName === deviceFilter);
+    if (!search.trim()) return base;
     const q = search.toLowerCase();
-    return allNotifications.filter((n) =>
+    return base.filter((n) =>
       n.text.toLowerCase().includes(q) ||
       n.app.toLowerCase().includes(q) ||
       (n.deviceName ?? "").toLowerCase().includes(q)
     );
-  }, [allNotifications, search]);
+  }, [allNotifications, search, deviceFilter]);
 
   const unassigned = filtered.filter((n) => !n.branchId);
   const isToday = selectedDate === toLocalDateString(new Date());
@@ -390,18 +401,30 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
         </div>
 
         {/* Filtros */}
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <div className="relative flex-shrink-0">
             <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <input
               type="date"
               value={selectedDate}
               max={toLocalDateString(new Date())}
-              onChange={(e) => { setSelectedDate(e.target.value); setSearch(""); }}
+              onChange={(e) => { setSelectedDate(e.target.value); setSearch(""); setDeviceFilter(""); }}
               className="pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div className="relative flex-1">
+          {uniqueDevices.length > 1 && (
+            <select
+              value={deviceFilter}
+              onChange={(e) => setDeviceFilter(e.target.value)}
+              className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Todos los dispositivos</option>
+              {uniqueDevices.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          )}
+          <div className="relative flex-1 min-w-[180px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <input
               type="text"

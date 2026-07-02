@@ -94,6 +94,7 @@ export default function DashboardPage() {
   const [filter, setFilter] = useState<"today" | "date" | "all">("today");
   const [selectedDate, setSelectedDate] = useState(toLocalDateString(new Date()));
   const [search, setSearch] = useState("");
+  const [deviceFilter, setDeviceFilter] = useState("");
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -252,10 +253,19 @@ export default function DashboardPage() {
     return [...notifications, ...olderNotifs.filter((n) => !ids.has(n.id))];
   }, [notifications, olderNotifs]);
 
+  const uniqueDevices = useMemo(() => {
+    const names = new Set<string>();
+    for (const n of allNotifications) {
+      if (n.deviceName) names.add(n.deviceName);
+    }
+    return Array.from(names).sort();
+  }, [allNotifications]);
+
   const filtered = useMemo(() => {
     let base = allNotifications;
     if (filter === "today") base = allNotifications.filter((n) => n.timestamp && isToday(n.timestamp));
     else if (filter === "date") base = allNotifications.filter((n) => n.timestamp && isSameDay(n.timestamp, selectedDate));
+    if (deviceFilter) base = base.filter((n) => n.deviceName === deviceFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
       base = base.filter((n) =>
@@ -265,7 +275,7 @@ export default function DashboardPage() {
       );
     }
     return base;
-  }, [allNotifications, filter, selectedDate, search]);
+  }, [allNotifications, filter, selectedDate, search, deviceFilter]);
 
   // Resetear selección cuando cambia el filtro
   useEffect(() => { setSelected(new Set()); }, [filter, selectedDate, search]);
@@ -496,8 +506,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Fila 2: fecha + búsqueda */}
-          <div className="flex gap-2">
+          {/* Fila 2: fecha + dispositivo + búsqueda */}
+          <div className="flex flex-wrap gap-2">
             {filter === "date" && (
               <div className="relative flex-shrink-0">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -509,6 +519,18 @@ export default function DashboardPage() {
                   className="pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+            )}
+            {uniqueDevices.length > 1 && (
+              <select
+                value={deviceFilter}
+                onChange={(e) => setDeviceFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="">Todos los dispositivos</option>
+                {uniqueDevices.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
             )}
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -544,6 +566,7 @@ export default function DashboardPage() {
                   </th>
                   <th className="hidden md:table-cell text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Fuente</th>
                   <th className="hidden md:table-cell text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">App</th>
+                  <th className="hidden lg:table-cell text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Dispositivo</th>
                   <th className="text-left px-3 md:px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Notificación</th>
                   <th className="text-right px-3 md:px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Monto</th>
                   <th className="hidden sm:table-cell text-right px-3 md:px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Hora</th>
@@ -572,6 +595,7 @@ export default function DashboardPage() {
                       </span>
                     </td>
                     <td className="hidden md:table-cell px-6 py-3 text-gray-600">{n.app}</td>
+                    <td className="hidden lg:table-cell px-6 py-3 text-gray-600 whitespace-nowrap">{n.deviceName ?? "—"}</td>
                     <td className="px-3 md:px-6 py-3 text-gray-700 max-w-[200px] md:max-w-sm break-words">{n.text}</td>
                     <td className="px-3 md:px-6 py-3 text-right font-medium text-gray-900 whitespace-nowrap">
                       {n.amount !== null ? formatCurrency(n.amount) : "—"}
