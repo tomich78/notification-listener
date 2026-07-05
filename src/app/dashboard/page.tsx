@@ -276,7 +276,8 @@ export default function DashboardPage() {
         where("userId", "==", user.uid),
         where("timestamp", ">=", startDate),
         where("timestamp", "<=", endDate),
-        orderBy("timestamp", "desc")
+        orderBy("timestamp", "desc"),
+        limit(200)
       );
       const snap = await getDocs(q).catch(() => null);
       if (snap) setSearchPool(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Notification[]);
