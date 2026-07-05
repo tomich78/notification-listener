@@ -111,6 +111,14 @@ export function isPaymentNotification(text: string): boolean {
     "disponible para vos",
     "conseguí",
     "arranca",
+    // Publicidad de lectores / hardware
+    "point smart",
+    "point mini",
+    "point plus",
+    "lector point",
+    "obtené tu lector",
+    "cobrá más fácil",
+    "cobrar más fácil",
     // Egresos / pagos que hizo el usuario (no cobros)
     "pagaste",
     "hiciste un pago",

@@ -95,6 +95,8 @@ export default function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState(toLocalDateString(new Date()));
   const [search, setSearch] = useState("");
   const [deviceFilter, setDeviceFilter] = useState("");
+  const [searchPool, setSearchPool] = useState<Notification[] | null>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -253,6 +255,34 @@ export default function DashboardPage() {
     return [...notifications, ...olderNotifs.filter((n) => !ids.has(n.id))];
   }, [notifications, olderNotifs]);
 
+  // Cuando hay búsqueda activa y filtro por día, cargar todos los docs de ese rango
+  useEffect(() => {
+    if (!user || !search.trim() || filter === "all") {
+      setSearchPool(null);
+      return;
+    }
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(async () => {
+      let startDate: Date, endDate: Date;
+      if (filter === "today") {
+        startDate = new Date(); startDate.setHours(0, 0, 0, 0);
+        endDate   = new Date(); endDate.setHours(23, 59, 59, 999);
+      } else {
+        startDate = new Date(selectedDate + "T00:00:00");
+        endDate   = new Date(selectedDate + "T23:59:59.999");
+      }
+      const q = query(
+        collection(db, "notifications"),
+        where("userId", "==", user.uid),
+        where("timestamp", ">=", startDate),
+        where("timestamp", "<=", endDate),
+        orderBy("timestamp", "desc")
+      );
+      const snap = await getDocs(q).catch(() => null);
+      if (snap) setSearchPool(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Notification[]);
+    }, 400);
+  }, [user, search, filter, selectedDate]);
+
   const uniqueDevices = useMemo(() => {
     const names = new Set<string>();
     for (const n of allNotifications) {
@@ -262,9 +292,12 @@ export default function DashboardPage() {
   }, [allNotifications]);
 
   const filtered = useMemo(() => {
-    let base = allNotifications;
-    if (filter === "today") base = allNotifications.filter((n) => n.timestamp && isToday(n.timestamp));
-    else if (filter === "date") base = allNotifications.filter((n) => n.timestamp && isSameDay(n.timestamp, selectedDate));
+    // searchPool ya viene filtrado por fecha desde Firestore
+    let base = searchPool ?? allNotifications;
+    if (!searchPool) {
+      if (filter === "today") base = allNotifications.filter((n) => n.timestamp && isToday(n.timestamp));
+      else if (filter === "date") base = allNotifications.filter((n) => n.timestamp && isSameDay(n.timestamp, selectedDate));
+    }
     if (deviceFilter) base = base.filter((n) => n.deviceName === deviceFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -275,7 +308,7 @@ export default function DashboardPage() {
       );
     }
     return base;
-  }, [allNotifications, filter, selectedDate, search, deviceFilter]);
+  }, [allNotifications, searchPool, filter, selectedDate, search, deviceFilter]);
 
   // Resetear selección cuando cambia el filtro
   useEffect(() => { setSelected(new Set()); }, [filter, selectedDate, search]);
@@ -349,12 +382,16 @@ export default function DashboardPage() {
     const timestamp = form.datetime ? new Date(form.datetime) : new Date();
 
     if (editing) {
-      await updateDoc(doc(db, "notifications", editing.id), {
+      const updates = {
         text: form.text.trim(),
         app: form.app.trim() || "Manual",
         amount: isNaN(amount as number) ? null : amount,
         timestamp,
-      });
+      };
+      await updateDoc(doc(db, "notifications", editing.id), updates);
+      const applyUpdate = (n: Notification) => n.id === editing.id ? { ...n, ...updates } : n;
+      setOlderNotifs((prev) => prev.map(applyUpdate));
+      setSearchPool((prev) => prev ? prev.map(applyUpdate) : null);
     } else {
       await addDoc(collection(db, "notifications"), {
         userId: user.uid,
@@ -380,6 +417,8 @@ export default function DashboardPage() {
         closeConfirm();
         setDeleting(id);
         await deleteDoc(doc(db, "notifications", id));
+        setOlderNotifs((prev) => prev.filter((n) => n.id !== id));
+        setSearchPool((prev) => prev ? prev.filter((n) => n.id !== id) : null);
         setDeleting(null);
       }
     );
@@ -396,6 +435,8 @@ export default function DashboardPage() {
         const batch = writeBatch(db);
         selected.forEach((id) => batch.delete(doc(db, "notifications", id)));
         await batch.commit();
+        setOlderNotifs((prev) => prev.filter((n) => !selected.has(n.id)));
+        setSearchPool((prev) => prev ? prev.filter((n) => !selected.has(n.id)) : null);
         setSelected(new Set());
         setDeletingMultiple(false);
       }
