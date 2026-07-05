@@ -389,7 +389,8 @@ export default function DashboardPage() {
         timestamp,
       };
       await updateDoc(doc(db, "notifications", editing.id), updates);
-      const applyUpdate = (n: Notification) => n.id === editing.id ? { ...n, ...updates } : n;
+      const applyUpdate = (n: Notification): Notification =>
+        n.id === editing.id ? ({ ...n, ...updates } as unknown as Notification) : n;
       setOlderNotifs((prev) => prev.map(applyUpdate));
       setSearchPool((prev) => prev ? prev.map(applyUpdate) : null);
     } else {
