@@ -96,7 +96,8 @@ export default function DashboardPage() {
   const [search, setSearch] = useState("");
   const [deviceFilter, setDeviceFilter] = useState("");
   const [searchPool, setSearchPool] = useState<Notification[] | null>(null);
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [deepSearching, setDeepSearching] = useState(false);
+  const [deepSearchLabel, setDeepSearchLabel] = useState("");
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -255,34 +256,37 @@ export default function DashboardPage() {
     return [...notifications, ...olderNotifs.filter((n) => !ids.has(n.id))];
   }, [notifications, olderNotifs]);
 
-  // Cuando hay búsqueda activa y filtro por día, cargar todos los docs de ese rango
-  useEffect(() => {
-    if (!user || !search.trim() || filter === "all") {
-      setSearchPool(null);
-      return;
+  async function handleDeepSearch() {
+    if (!user || !search.trim() || deepSearching) return;
+    setDeepSearching(true);
+    let q;
+    let label: string;
+    if (filter === "today") {
+      const startDate = new Date(); startDate.setHours(0, 0, 0, 0);
+      const endDate   = new Date(); endDate.setHours(23, 59, 59, 999);
+      q = query(collection(db, "notifications"), where("userId", "==", user.uid), where("timestamp", ">=", startDate), where("timestamp", "<=", endDate), orderBy("timestamp", "desc"), limit(500));
+      label = "hoy";
+    } else if (filter === "date") {
+      const startDate = new Date(selectedDate + "T00:00:00");
+      const endDate   = new Date(selectedDate + "T23:59:59.999");
+      q = query(collection(db, "notifications"), where("userId", "==", user.uid), where("timestamp", ">=", startDate), where("timestamp", "<=", endDate), orderBy("timestamp", "desc"), limit(500));
+      label = new Date(selectedDate + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long" });
+    } else {
+      q = query(collection(db, "notifications"), where("userId", "==", user.uid), orderBy("timestamp", "desc"), limit(1000));
+      label = "todo el historial";
     }
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    searchTimerRef.current = setTimeout(async () => {
-      let startDate: Date, endDate: Date;
-      if (filter === "today") {
-        startDate = new Date(); startDate.setHours(0, 0, 0, 0);
-        endDate   = new Date(); endDate.setHours(23, 59, 59, 999);
-      } else {
-        startDate = new Date(selectedDate + "T00:00:00");
-        endDate   = new Date(selectedDate + "T23:59:59.999");
-      }
-      const q = query(
-        collection(db, "notifications"),
-        where("userId", "==", user.uid),
-        where("timestamp", ">=", startDate),
-        where("timestamp", "<=", endDate),
-        orderBy("timestamp", "desc"),
-        limit(200)
-      );
-      const snap = await getDocs(q).catch(() => null);
-      if (snap) setSearchPool(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Notification[]);
-    }, 400);
-  }, [user, search, filter, selectedDate]);
+    const snap = await getDocs(q).catch(() => null);
+    if (snap) {
+      setSearchPool(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Notification[]);
+      setDeepSearchLabel(label);
+    }
+    setDeepSearching(false);
+  }
+
+  function clearDeepSearch() {
+    setSearchPool(null);
+    setDeepSearchLabel("");
+  }
 
   const uniqueDevices = useMemo(() => {
     const names = new Set<string>();
@@ -311,8 +315,11 @@ export default function DashboardPage() {
     return base;
   }, [allNotifications, searchPool, filter, selectedDate, search, deviceFilter]);
 
-  // Resetear selección cuando cambia el filtro
-  useEffect(() => { setSelected(new Set()); }, [filter, selectedDate, search]);
+  // Resetear selección y búsqueda profunda cuando cambia el filtro o fecha
+  useEffect(() => {
+    setSelected(new Set());
+    clearDeepSearch();
+  }, [filter, selectedDate]);
 
   const monthNotifCount = useMemo(() => {
     const startOfMonth = new Date();
@@ -581,11 +588,31 @@ export default function DashboardPage() {
                 type="text"
                 placeholder="Buscar..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => { setSearch(e.target.value); if (!e.target.value.trim()) clearDeepSearch(); }}
+                onKeyDown={(e) => { if (e.key === "Enter" && search.trim()) handleDeepSearch(); }}
                 className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+            <button
+              onClick={handleDeepSearch}
+              disabled={!search.trim() || deepSearching}
+              className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium rounded-xl hover:bg-blue-100 transition-colors disabled:opacity-40 whitespace-nowrap"
+              title={filter === "all" ? "Busca en todo el historial" : "Busca en todos los registros de la fecha elegida"}
+            >
+              {deepSearching
+                ? <div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                : <Search className="w-3.5 h-3.5" />}
+              {deepSearching ? "Buscando..." : filter === "all" ? "Buscar en historial" : "Buscar en fecha"}
+            </button>
           </div>
+          {deepSearchLabel && (
+            <div className="flex items-center gap-2 px-1">
+              <span className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2.5 py-0.5">
+                Búsqueda en {deepSearchLabel} · {filtered.length} resultado{filtered.length !== 1 ? "s" : ""}
+              </span>
+              <button onClick={clearDeepSearch} className="text-xs text-gray-400 hover:text-gray-600">✕ Volver a vista normal</button>
+            </div>
+          )}
         </div>
 
         {loading ? (
