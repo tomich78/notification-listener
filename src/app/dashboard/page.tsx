@@ -25,7 +25,7 @@ import {
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Notification, BranchConfig } from "@/lib/types";
-import { formatCurrency, formatDateShort, isToday, extractAmount, checkPlanExpiry } from "@/lib/utils";
+import { formatCurrency, formatDateShort, extractAmount, checkPlanExpiry } from "@/lib/utils";
 import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar, AlertTriangle, FileDown, RefreshCw } from "lucide-react";
 import OnboardingWizard from "@/components/OnboardingWizard";
 import ReportModal from "@/components/ReportModal";
@@ -34,10 +34,6 @@ function toLocalDateString(date: Date) {
   return date.toLocaleDateString("en-CA");
 }
 
-function isSameDay(ts: { toDate?: () => Date } | Date, dateStr: string): boolean {
-  const date = ts instanceof Date ? ts : (ts as { toDate: () => Date }).toDate?.() ?? new Date(0);
-  return toLocalDateString(date) === dateStr;
-}
 
 const SOURCE_LABELS: Record<string, string> = {
   android: "Android",
@@ -199,47 +195,64 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user) return;
-    // Reset older pages when user changes
+    setLoading(true);
     setOlderNotifs([]);
+    setHasMore(false);
     lastVisibleRef.current = null;
     lastOlderRef.current = null;
     latestIdRef.current = null;
 
-    fetchAggregates(user.uid);
+    let q;
+    if (filter === "today") {
+      const start = new Date(); start.setHours(0, 0, 0, 0);
+      const end   = new Date(); end.setHours(23, 59, 59, 999);
+      q = query(collection(db, "notifications"), where("userId", "==", user.uid), where("timestamp", ">=", start), where("timestamp", "<=", end), orderBy("timestamp", "desc"), limit(PAGE_SIZE));
+    } else if (filter === "date") {
+      const start = new Date(selectedDate + "T00:00:00");
+      const end   = new Date(selectedDate + "T23:59:59.999");
+      q = query(collection(db, "notifications"), where("userId", "==", user.uid), where("timestamp", ">=", start), where("timestamp", "<=", end), orderBy("timestamp", "desc"), limit(PAGE_SIZE));
+    } else {
+      // "all" — últimas 50 en general, sin filtro de fecha
+      q = query(collection(db, "notifications"), where("userId", "==", user.uid), orderBy("timestamp", "desc"), limit(PAGE_SIZE));
+    }
 
-    const q = query(
-      collection(db, "notifications"),
-      where("userId", "==", user.uid),
-      orderBy("timestamp", "desc"),
-      limit(PAGE_SIZE)
-    );
     const unsub = onSnapshot(q, (snap) => {
       setNotifications(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Notification[]);
       setHasMore(snap.docs.length === PAGE_SIZE);
       lastVisibleRef.current = snap.docs[snap.docs.length - 1] ?? null;
       setLoading(false);
-      // Re-calcular totales cuando llega una notificación nueva
-      const latestId = snap.docs[0]?.id ?? null;
-      if (latestId !== latestIdRef.current) {
-        latestIdRef.current = latestId;
-        fetchAggregates(user.uid);
+      // Re-calcular totales solo cuando llega notificación nueva en "hoy"
+      if (filter === "today") {
+        const latestId = snap.docs[0]?.id ?? null;
+        if (latestId !== latestIdRef.current) {
+          latestIdRef.current = latestId;
+          fetchAggregates(user.uid);
+        }
       }
     });
+
+    if (filter !== "today") fetchAggregates(user.uid);
+
     return unsub;
-  }, [user]);
+  }, [user, filter, selectedDate]);
 
   async function loadMore() {
     if (!user || loadingMore) return;
     const cursor = lastOlderRef.current ?? lastVisibleRef.current;
     if (!cursor) return;
     setLoadingMore(true);
-    const q = query(
-      collection(db, "notifications"),
-      where("userId", "==", user.uid),
-      orderBy("timestamp", "desc"),
-      startAfter(cursor),
-      limit(PAGE_SIZE)
-    );
+    let q;
+    if (filter === "today") {
+      const start = new Date(); start.setHours(0, 0, 0, 0);
+      const end   = new Date(); end.setHours(23, 59, 59, 999);
+      q = query(collection(db, "notifications"), where("userId", "==", user.uid), where("timestamp", ">=", start), where("timestamp", "<=", end), orderBy("timestamp", "desc"), startAfter(cursor), limit(PAGE_SIZE));
+    } else if (filter === "date") {
+      const start = new Date(selectedDate + "T00:00:00");
+      const end   = new Date(selectedDate + "T23:59:59.999");
+      q = query(collection(db, "notifications"), where("userId", "==", user.uid), where("timestamp", ">=", start), where("timestamp", "<=", end), orderBy("timestamp", "desc"), startAfter(cursor), limit(PAGE_SIZE));
+    } else {
+      q = query(collection(db, "notifications"), where("userId", "==", user.uid), orderBy("timestamp", "desc"), startAfter(cursor), limit(PAGE_SIZE));
+    }
     const snap = await getDocs(q);
     const newItems = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Notification[];
     setOlderNotifs((prev) => {
@@ -297,12 +310,7 @@ export default function DashboardPage() {
   }, [allNotifications]);
 
   const filtered = useMemo(() => {
-    // searchPool ya viene filtrado por fecha desde Firestore
     let base = searchPool ?? allNotifications;
-    if (!searchPool) {
-      if (filter === "today") base = allNotifications.filter((n) => n.timestamp && isToday(n.timestamp));
-      else if (filter === "date") base = allNotifications.filter((n) => n.timestamp && isSameDay(n.timestamp, selectedDate));
-    }
     if (deviceFilter) base = base.filter((n) => n.deviceName === deviceFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -313,7 +321,7 @@ export default function DashboardPage() {
       );
     }
     return base;
-  }, [allNotifications, searchPool, filter, selectedDate, search, deviceFilter]);
+  }, [allNotifications, searchPool, search, deviceFilter]);
 
   // Resetear selección y búsqueda profunda cuando cambia el filtro o fecha
   useEffect(() => {
