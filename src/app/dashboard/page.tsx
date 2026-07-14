@@ -564,37 +564,43 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Fila 2: fecha + dispositivo + búsqueda */}
-          <div className="flex flex-wrap gap-2">
-            {filter === "date" && (
-              <div className="relative flex-shrink-0">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                <input
-                  type="date"
-                  value={selectedDate}
-                  max={toLocalDateString(new Date())}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            )}
-            {uniqueDevices.length > 1 && (
-              <select
-                value={deviceFilter}
-                onChange={(e) => setDeviceFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                <option value="">Todos los dispositivos</option>
-                {uniqueDevices.map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-            )}
+          {/* Fila 2: fecha + dispositivo */}
+          {(filter === "date" || uniqueDevices.length > 1) && (
+            <div className="flex flex-wrap gap-2">
+              {filter === "date" && (
+                <div className="relative flex-shrink-0">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    max={toLocalDateString(new Date())}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+              {uniqueDevices.length > 1 && (
+                <select
+                  value={deviceFilter}
+                  onChange={(e) => setDeviceFilter(e.target.value)}
+                  className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">Todos los dispositivos</option>
+                  {uniqueDevices.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
+          {/* Fila 3: buscador + botón búsqueda profunda */}
+          <div className="flex gap-2">
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Buscar..."
+                placeholder="Buscar en registros cargados..."
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); if (!e.target.value.trim()) clearDeepSearch(); }}
                 onKeyDown={(e) => { if (e.key === "Enter" && search.trim()) handleDeepSearch(); }}
@@ -604,13 +610,18 @@ export default function DashboardPage() {
             <button
               onClick={handleDeepSearch}
               disabled={!search.trim() || deepSearching}
-              className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium rounded-xl hover:bg-blue-100 transition-colors disabled:opacity-40 whitespace-nowrap"
+              className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium rounded-xl hover:bg-blue-100 transition-colors disabled:opacity-40 whitespace-nowrap flex-shrink-0"
               title={filter === "all" ? "Busca en todo el historial" : "Busca en todos los registros de la fecha elegida"}
             >
               {deepSearching
                 ? <div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                 : <Search className="w-3.5 h-3.5" />}
-              {deepSearching ? "Buscando..." : filter === "all" ? "Buscar en historial" : "Buscar en fecha"}
+              <span className="hidden sm:inline">
+                {deepSearching ? "Buscando..." : filter === "all" ? "Buscar en historial" : "Buscar en fecha"}
+              </span>
+              <span className="sm:hidden">
+                {deepSearching ? "..." : filter === "all" ? "Historial" : "En fecha"}
+              </span>
             </button>
           </div>
           {deepSearchLabel && (
