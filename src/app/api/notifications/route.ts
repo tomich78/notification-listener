@@ -9,6 +9,10 @@ interface IncomingNotification {
   app: string;
   text: string;
   timestamp?: number;
+  // ID determinista calculado por la app (hash de sbnKey + text).
+  // Se usa como ID del documento para que reenvíos de la misma notificación
+  // sobrescriban el mismo doc en vez de crear duplicados.
+  dedupeId?: string;
 }
 
 // Cache en módulo — sobrevive entre requests en la misma instancia de Vercel
@@ -153,13 +157,33 @@ export async function POST(req: NextRequest) {
     }
 
     // Guardar en Firestore (batch write)
+    // Usamos dedupeId como ID del documento cuando la app lo envía: así, si la
+    // misma notificación se reenvía (reintento por respuesta perdida, recaptura
+    // al reconectar, o re-post del OEM), sobrescribe el mismo doc en vez de
+    // duplicarlo. Firestore no permite escribir dos veces el mismo doc en un
+    // batch, así que también deduplicamos dentro del propio request.
     const batch = db.batch();
+    const seenIds = new Set<string>();
+    let saved = 0;
     for (const n of toSave) {
       const text = String(n.text).slice(0, 1000);
       const app  = String(n.app  ?? "").slice(0, 100);
       if (!app) continue;
 
-      const ref = db.collection("notifications").doc();
+      const dedupeId =
+        typeof n.dedupeId === "string" && n.dedupeId.length > 0 && !n.dedupeId.includes("/")
+          ? n.dedupeId
+          : null;
+
+      if (dedupeId) {
+        if (seenIds.has(dedupeId)) continue; // duplicado dentro del mismo lote
+        seenIds.add(dedupeId);
+      }
+
+      const ref = dedupeId
+        ? db.collection("notifications").doc(dedupeId)
+        : db.collection("notifications").doc();
+
       batch.set(ref, {
         userId:     deviceInfo.userId,
         deviceId:   deviceInfo.docPath.split("/").pop(),
@@ -172,12 +196,13 @@ export async function POST(req: NextRequest) {
           ? new Date(n.timestamp)
           : FieldValue.serverTimestamp(),
       });
+      saved++;
     }
     await batch.commit();
 
     await deviceDocRef!.update({ lastSeen: FieldValue.serverTimestamp() });
 
-    return NextResponse.json({ ok: true, saved: toSave.length });
+    return NextResponse.json({ ok: true, saved });
 
   } catch (err: unknown) {
     // RESOURCE_EXHAUSTED (código 8) → cuota de Firestore agotada
