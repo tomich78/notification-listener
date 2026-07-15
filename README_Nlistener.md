@@ -8,9 +8,9 @@ Cross-platform SaaS: a native Android app captures banking/payment notifications
 
 ## Screenshots
 
-<img width="1879" height="899" alt="Dashboard user" src="https://github.com/user-attachments/assets/0561ff38-7539-442d-bd31-795c99574c80" />
+<img width="1879" height="899" alt="Dashboard user" src="https://github.com/user-attachments/assets/ecf961a6-b13f-4733-9459-3a9f804e797b" />
 
-<img width="1031" height="896" alt="publicView" src="https://github.com/user-attachments/assets/9f3b8882-f478-4af7-804c-a84c0d3dea86" />
+<img width="1031" height="896" alt="publicView" src="https://github.com/user-attachments/assets/b5d05a14-7494-4f0b-a059-354c5b296447" />
 
 <img width="575" height="1280" alt="Mobile" src="https://github.com/user-attachments/assets/70699dd3-3121-4c17-9d3f-1f3b05db5336" />
 
