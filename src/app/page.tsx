@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Smartphone, Globe, Zap, Shield, ArrowRight, Check, Store, Users, Lock, Bell } from "lucide-react";
 import { getAdminDb } from "@/lib/firebase-admin";
 import AuthRedirect from "@/components/AuthRedirect";
+import { annualMonthlyPrice, annualTotalPrice, ANNUAL_DISCOUNT_PCT } from "@/lib/pricing";
 
 interface PlanConfig {
   proPrice: number;
@@ -30,6 +31,9 @@ async function getPlanConfig(): Promise<PlanConfig> {
 
 export default async function LandingPage() {
   const plan = await getPlanConfig();
+  // Anual: se paga de una vez por año, con descuento sobre el precio mensual
+  const annualMonthly = annualMonthlyPrice(plan.proPrice);
+  const annualTotal = annualTotalPrice(plan.proPrice);
   return (
     <div className="min-h-screen bg-white text-gray-900">
       <AuthRedirect />
@@ -165,6 +169,77 @@ export default async function LandingPage() {
         </div>
       </section>
 
+      {/* Modo sucursales */}
+      <section className="bg-white py-20 border-y border-gray-100">
+        <div className="max-w-5xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-50 border border-purple-100 rounded-full text-xs font-bold text-purple-600 mb-5">
+              <Store className="w-3.5 h-3.5" />
+              FUNCIÓN PRO
+            </div>
+            <h2 className="text-2xl md:text-3xl font-bold mb-4">
+              ¿Tenés más de un local?<br />
+              <span className="text-blue-600">Modo sucursales.</span>
+            </h2>
+            <p className="text-gray-500 mb-6 text-sm leading-relaxed">
+              Cada sucursal tiene su color y su propia contraseña. Tus cajeros marcan los
+              cobros de su local, y vos ves los totales de cada sucursal por separado —
+              en vivo y en los reportes.
+            </p>
+            <ul className="space-y-3">
+              {[
+                "Cada empleado ve y marca solo los cobros de su sucursal",
+                "Totales por local en tiempo real",
+                "Acceso protegido con contraseña por sucursal",
+                "Reportes en PDF con desglose por sucursal",
+              ].map((f) => (
+                <li key={f} className="flex items-center gap-2.5 text-sm text-gray-700">
+                  <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
+                  {f}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Mock de sucursales */}
+          <div className="bg-gray-900 rounded-2xl p-4 shadow-2xl">
+            <div className="flex items-center gap-1.5 mb-3">
+              <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+              <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
+              <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
+            </div>
+            <div className="bg-white rounded-xl p-4">
+              <div className="grid grid-cols-2 gap-2.5 mb-4">
+                {[
+                  { name: "Centro", total: "$31.200", dot: "bg-blue-500", bg: "bg-blue-50" },
+                  { name: "Norte", total: "$18.750", dot: "bg-purple-500", bg: "bg-purple-50" },
+                ].map((b) => (
+                  <div key={b.name} className={`${b.bg} rounded-lg p-3`}>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <div className={`w-2 h-2 rounded-full ${b.dot}`} />
+                      <p className="text-xs font-medium text-gray-600">{b.name}</p>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900">{b.total}</p>
+                  </div>
+                ))}
+              </div>
+              {[
+                { text: "Recibiste $9.000 de Lucía P.", branch: "Centro", color: "bg-blue-500" },
+                { text: "Transferencia recibida $6.250", branch: "Norte", color: "bg-purple-500" },
+                { text: "Recibiste $12.400 de Marcos T.", branch: "Centro", color: "bg-blue-500" },
+              ].map((n, i) => (
+                <div key={i} className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0">
+                  <span className="text-sm text-gray-700 truncate mr-2">{n.text}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium text-white flex-shrink-0 ${n.color}`}>
+                    {n.branch}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Features */}
       <section className="bg-gray-50 py-20">
         <div className="max-w-5xl mx-auto px-6">
@@ -195,7 +270,9 @@ export default async function LandingPage() {
       {/* Precios */}
       <section className="max-w-5xl mx-auto px-6 py-20" id="precios">
         <h2 className="text-2xl md:text-3xl font-bold text-center mb-3">Precios simples</h2>
-        <p className="text-center text-gray-500 mb-12 text-sm">Sin sorpresas. Cancelás cuando querés.</p>
+        <p className="text-center text-gray-500 mb-12 text-sm">
+          Sin sorpresas. Cancelás cuando querés. Pagando por año, ahorrás un {ANNUAL_DISCOUNT_PCT}%.
+        </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
 
           {/* Free */}
@@ -240,7 +317,14 @@ export default async function LandingPage() {
                 <span className="text-4xl font-bold">${plan.proPrice.toLocaleString("es-AR")}</span>
                 <span className="text-blue-300 text-sm">/mes</span>
               </div>
-              <p className="text-xs text-blue-300 mt-1">Pesos argentinos · MercadoPago</p>
+              <div className="mt-3 flex items-start gap-2 bg-white/15 rounded-lg px-3 py-2">
+                <span className="text-[10px] font-bold bg-green-400 text-green-950 px-1.5 py-0.5 rounded mt-0.5 flex-shrink-0">-{ANNUAL_DISCOUNT_PCT}%</span>
+                <p className="text-xs text-blue-100 leading-snug">
+                  <span className="font-bold text-white">${annualMonthly.toLocaleString("es-AR")}/mes</span> pagando
+                  el año entero (${annualTotal.toLocaleString("es-AR")} por año)
+                </p>
+              </div>
+              <p className="text-xs text-blue-300 mt-2">Pesos argentinos · MercadoPago</p>
             </div>
             <ul className="space-y-3 mb-8">
               {[

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
+import { annualMonthlyPrice } from "@/lib/pricing";
 
 const ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN!;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL!;
@@ -19,10 +20,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Token inválido" }, { status: 401 });
   }
 
+  // Período elegido: mensual (default) o anual con 25% de descuento
+  const body = await req.json().catch(() => ({}));
+  const isAnnual = body?.period === "annual";
+
   // Leer precio del plan desde Firestore
   const db = getAdminDb();
   const configSnap = await db.collection("config").doc("plans").get();
   const proPrice = configSnap.exists ? (configSnap.data()?.proPrice ?? 2500) : 2500;
+
+  // Anual: descuento sobre el mensual, cobrado de una vez por los 12 meses
+  const amount = isAnnual ? annualMonthlyPrice(proPrice) * 12 : proPrice;
 
   // Crear suscripción en MercadoPago (Preapproval)
   const res = await fetch("https://api.mercadopago.com/preapproval", {
@@ -32,13 +40,13 @@ export async function POST(req: NextRequest) {
       Authorization: `Bearer ${ACCESS_TOKEN}`,
     },
     body: JSON.stringify({
-      reason: "NListener Pro",
+      reason: isAnnual ? "NListener Pro (anual)" : "NListener Pro",
       external_reference: uid,
       payer_email: email,
       auto_recurring: {
-        frequency: 1,
+        frequency: isAnnual ? 12 : 1,
         frequency_type: "months",
-        transaction_amount: proPrice,
+        transaction_amount: amount,
         currency_id: "ARS",
       },
       back_url: `${APP_URL}/upgrade/success`,

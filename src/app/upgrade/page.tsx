@@ -5,6 +5,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Crown, Check, ArrowLeft } from "lucide-react";
+import { annualMonthlyPrice, annualTotalPrice, annualSavings, ANNUAL_DISCOUNT_PCT } from "@/lib/pricing";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -29,6 +30,12 @@ export default function UpgradePage() {
   const [userPlan, setUserPlan] = useState<"free" | "pro">("free");
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState(false);
+  const [period, setPeriod] = useState<"monthly" | "annual">("monthly");
+
+  // Anual: se paga de una vez por año, con descuento sobre el precio mensual
+  const annualMonthly = annualMonthlyPrice(planConfig.proPrice);
+  const annualTotal = annualTotalPrice(planConfig.proPrice);
+  const savings = annualSavings(planConfig.proPrice);
 
   useEffect(() => {
     if (authLoading) return;
@@ -81,13 +88,41 @@ export default function UpgradePage() {
 
         {/* Card */}
         <div className="bg-white rounded-2xl border-2 border-blue-600 p-6 mb-4 shadow-lg">
+          {/* Selector mensual / anual */}
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-5">
+            <button
+              onClick={() => setPeriod("monthly")}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                period === "monthly" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Mensual
+            </button>
+            <button
+              onClick={() => setPeriod("annual")}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                period === "annual" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Anual
+              <span className="text-[10px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded">-{ANNUAL_DISCOUNT_PCT}%</span>
+            </button>
+          </div>
+
           <div className="flex items-end gap-1 mb-1">
             <span className="text-4xl font-bold text-gray-900">
-              ${planConfig.proPrice.toLocaleString("es-AR")}
+              ${(period === "monthly" ? planConfig.proPrice : annualMonthly).toLocaleString("es-AR")}
             </span>
             <span className="text-gray-400 text-sm mb-1">/mes</span>
           </div>
-          <p className="text-xs text-gray-400 mb-6">Pago mensual · Cancelá cuando quieras</p>
+          {period === "monthly" ? (
+            <p className="text-xs text-gray-400 mb-6">Pago mensual · Cancelá cuando quieras</p>
+          ) : (
+            <p className="text-xs text-gray-400 mb-6">
+              Un pago de <span className="font-semibold text-gray-600">${annualTotal.toLocaleString("es-AR")}</span> por
+              año · Ahorrás ${savings.toLocaleString("es-AR")}
+            </p>
+          )}
 
           <ul className="space-y-3 mb-6">
             {[
@@ -112,7 +147,11 @@ export default function UpgradePage() {
                 const token = await user.getIdToken();
                 const res = await fetch("/api/mp/subscribe", {
                   method: "POST",
-                  headers: { Authorization: `Bearer ${token}` },
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({ period }),
                 });
                 const data = await res.json();
                 if (data.init_point) {
@@ -134,8 +173,15 @@ export default function UpgradePage() {
             ) : (
               <Crown className="w-4 h-4" />
             )}
-            {subscribing ? "Redirigiendo a MercadoPago..." : "Suscribirme ahora"}
+            {subscribing
+              ? "Redirigiendo a MercadoPago..."
+              : period === "annual" ? "Suscribirme por un año" : "Suscribirme ahora"}
           </button>
+          <p className="text-[11px] text-gray-400 text-center mt-3">
+            {period === "annual"
+              ? "Se cobra una vez por año y se renueva automáticamente. Cancelás cuando quieras."
+              : "Se cobra todos los meses automáticamente. Cancelás cuando quieras."}
+          </p>
         </div>
 
         {/* Free comparison */}
