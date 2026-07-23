@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { collection, query, where, orderBy, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { branchLabel, branchLabelPlural, branchLabelPluralLower } from "@/lib/branchLabel";
 import { Notification, Device, BranchConfig } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 import { X, FileDown, Loader2 } from "lucide-react";
@@ -137,7 +138,7 @@ export default function ReportModal({ userId, onClose }: Props) {
         doc.setFontSize(9);
         doc.setFont("helvetica", "normal");
         doc.setTextColor(100, 100, 100);
-        doc.text(`Sucursales: ${names}`, 14, subtitleY);
+        doc.text(`${branchLabelPlural(branchConfig.label)}: ${names}`, 14, subtitleY);
       }
 
       // Resumen
@@ -182,7 +183,7 @@ export default function ReportModal({ userId, onClose }: Props) {
       autoTable(doc, {
         startY: 84,
         head: [hasBranches
-          ? ["Hora", "App", "Notificación", "Dispositivo", "Sucursal", "Monto"]
+          ? ["Hora", "App", "Notificación", "Dispositivo", branchLabel(branchConfig?.label), "Monto"]
           : ["Hora", "App", "Notificación", "Dispositivo", "Monto"]
         ],
         body: rows,
@@ -283,7 +284,7 @@ export default function ReportModal({ userId, onClose }: Props) {
           {branchConfig?.enabled && branchConfig.branches.length > 0 && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Sucursales a incluir
+                {branchLabelPlural(branchConfig.label)} a incluir
               </label>
               <div className="space-y-2">
                 <label className="flex items-center gap-3 p-2 cursor-pointer hover:bg-gray-50 rounded-lg transition-colors">
@@ -299,7 +300,7 @@ export default function ReportModal({ userId, onClose }: Props) {
                     }}
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
-                  <span className="text-sm font-medium text-gray-600">Todas las sucursales</span>
+                  <span className="text-sm font-medium text-gray-600">Todas las {branchLabelPluralLower(branchConfig.label)}</span>
                 </label>
                 <div className="border-t border-gray-100 pt-2 space-y-1.5">
                   {branchConfig.branches.map(b => (

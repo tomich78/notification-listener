@@ -133,7 +133,7 @@ export default async function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               { icon: <Store className="w-5 h-5 text-blue-600" />, title: "Locales y kioscos", desc: "El cajero confirma el pago sin tocar tu teléfono ni acceder a tu cuenta." },
-              { icon: <Users className="w-5 h-5 text-blue-600" />, title: "Negocios con sucursales", desc: "Cada sucursal ve solo sus propios cobros. Plan Pro incluye múltiples sucursales." },
+              { icon: <Users className="w-5 h-5 text-blue-600" />, title: "Sucursales o equipos de venta", desc: "Dividí los cobros por local, por vendedor o por turno. Cada uno marca los suyos. (Pro)" },
               { icon: <Lock className="w-5 h-5 text-blue-600" />, title: "Emprendedores", desc: "Tu información bancaria queda privada. Compartís solo lo necesario." },
             ].map((item) => (
               <div key={item.title} className="bg-white rounded-xl p-6 border border-gray-200">
@@ -169,7 +169,7 @@ export default async function LandingPage() {
         </div>
       </section>
 
-      {/* Modo sucursales */}
+      {/* Dividir cobros por sucursal / vendedor / turno */}
       <section className="bg-white py-20 border-y border-gray-100">
         <div className="max-w-5xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
           <div>
@@ -178,20 +178,20 @@ export default async function LandingPage() {
               FUNCIÓN PRO
             </div>
             <h2 className="text-2xl md:text-3xl font-bold mb-4">
-              ¿Tenés más de un local?<br />
-              <span className="text-blue-600">Modo sucursales.</span>
+              ¿Varios locales o varios vendedores?<br />
+              <span className="text-blue-600">Dividí los cobros.</span>
             </h2>
             <p className="text-gray-500 mb-6 text-sm leading-relaxed">
-              Cada sucursal tiene su color y su propia contraseña. Tus cajeros marcan los
-              cobros de su local, y vos ves los totales de cada sucursal por separado —
-              en vivo y en los reportes.
+              Separá los cobros por sucursal, por vendedor o por turno — vos elegís cómo.
+              Cada uno marca los suyos desde la vista pública y vos ves los totales por
+              separado, en vivo y en los reportes.
             </p>
             <ul className="space-y-3">
               {[
-                "Cada empleado ve y marca solo los cobros de su sucursal",
-                "Totales por local en tiempo real",
-                "Acceso protegido con contraseña por sucursal",
-                "Reportes en PDF con desglose por sucursal",
+                "Sucursales, vendedores, turnos o cajas: vos ponés los nombres",
+                "Totales por cada uno en tiempo real",
+                "Una contraseña compartida, o una por persona para que cada uno marque solo lo suyo",
+                "Reportes en PDF con el desglose",
               ].map((f) => (
                 <li key={f} className="flex items-center gap-2.5 text-sm text-gray-700">
                   <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
@@ -201,7 +201,7 @@ export default async function LandingPage() {
             </ul>
           </div>
 
-          {/* Mock de sucursales */}
+          {/* Mock de grupos */}
           <div className="bg-gray-900 rounded-2xl p-4 shadow-2xl">
             <div className="flex items-center gap-1.5 mb-3">
               <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
@@ -250,7 +250,7 @@ export default async function LandingPage() {
               { icon: <Globe className="w-4 h-4 text-blue-600" />, title: "Compatible con cualquier banco", desc: "Funciona con cualquier banco o billetera que envíe notificaciones de transferencias al celular." },
               { icon: <Zap className="w-4 h-4 text-blue-600" />, title: "Actualización en tiempo real", desc: "Los cobros aparecen en segundos. Sin recargar la pantalla." },
               { icon: <Shield className="w-4 h-4 text-blue-600" />, title: "Vista de solo lectura", desc: "El link para empleados no permite modificar nada. Solo ver. Con contraseña opcional." },
-              { icon: <Users className="w-4 h-4 text-blue-600" />, title: "Modo sucursales", desc: "Asigná cada cobro a una sucursal. Cada empleado ve solo lo suyo. (Pro)" },
+              { icon: <Users className="w-4 h-4 text-blue-600" />, title: "Por sucursal o vendedor", desc: "Asigná cada cobro a un local, un vendedor o un turno, y mirá los totales de cada uno. (Pro)" },
               { icon: <Bell className="w-4 h-4 text-blue-600" />, title: "Historial completo", desc: "Buscá y filtrá todos tus cobros por fecha, monto o texto." },
             ].map((f) => (
               <div key={f.title} className="flex gap-4 p-5 bg-white rounded-xl border border-gray-200 hover:border-blue-200 transition-colors">
@@ -330,9 +330,9 @@ export default async function LandingPage() {
               {[
                 `Hasta ${plan.proDeviceLimit} dispositivos Android`,
                 "Cobros ilimitados",
-                "Modo sucursales con colores",
-                "Totales por sucursal",
-                "Vista con contraseña por sucursal",
+                "Dividir por sucursal, vendedor o turno",
+                "Totales de cada uno por separado",
+                "Contraseña propia por persona",
                 "Todo lo del plan Free",
               ].map((f) => (
                 <li key={f} className="flex items-center gap-2.5 text-sm text-white">

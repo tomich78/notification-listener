@@ -5,6 +5,7 @@ import { collection, query, where, orderBy, onSnapshot, doc, getDoc, getDocs, li
 import { db } from "@/lib/firebase";
 import { Notification, BranchConfig } from "@/lib/types";
 import { formatCurrency, formatDateShort } from "@/lib/utils";
+import { branchLabelLower, branchLabelPluralLower } from "@/lib/branchLabel";
 import { Bell, Globe, Smartphone, Search, Calendar, Lock, ChevronDown, RefreshCw, FileDown } from "lucide-react";
 import Image from "next/image";
 import ReportModal from "@/components/ReportModal";
@@ -50,6 +51,14 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [activeBranch, setActiveBranch] = useState<string | null>(null); // null = no logueado
+  // "all" = contraseña compartida (puede marcar cualquiera)
+  // "group" = contraseña propia (solo puede marcar lo suyo)
+  const [authScope, setAuthScope] = useState<"all" | "group">("all");
+  const [checkingPassword, setCheckingPassword] = useState(false);
+  const [assignError, setAssignError] = useState("");
+
+  const groupLabelLower = branchLabelLower(branchConfig?.label);
+  const groupLabelPluralLower = branchLabelPluralLower(branchConfig?.label);
   const [assigning, setAssigning] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState<string | null>(null);
 
@@ -184,14 +193,35 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
     setLoadingMore(false);
   }
 
-  function handlePasswordSubmit(e: React.FormEvent) {
+  async function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!branchConfig) return;
-    if (password === branchConfig.password) {
-      setActiveBranch("__selecting__");
-      setPasswordError("");
-    } else {
-      setPasswordError("Contraseña incorrecta");
+    if (!branchConfig || checkingPassword) return;
+    setCheckingPassword(true);
+    setPasswordError("");
+    try {
+      // La contraseña se valida en el servidor: el navegador nunca la recibe.
+      const res = await fetch("/api/branch/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: uid, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPasswordError("Contraseña incorrecta");
+        return;
+      }
+      if (data.scope === "group") {
+        // Contraseña propia: entra directo a su grupo y solo marca lo suyo
+        setAuthScope("group");
+        setActiveBranch(data.branchId);
+      } else {
+        setAuthScope("all");
+        setActiveBranch("__selecting__");
+      }
+    } catch {
+      setPasswordError("Error de conexión. Intentá de nuevo.");
+    } finally {
+      setCheckingPassword(false);
     }
   }
 
@@ -202,12 +232,24 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
   async function assignBranch(notifId: string, branchId: string | null) {
     setAssigning(notifId);
     setDropdownOpen(null);
-    await fetch("/api/branch", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: uid, notifId, branchId, password }),
-    });
-    setAssigning(null);
+    setAssignError("");
+    try {
+      const res = await fetch("/api/branch", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: uid, notifId, branchId, password }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setAssignError(data.error ?? "No se pudo asignar el cobro.");
+        setTimeout(() => setAssignError(""), 4000);
+      }
+    } catch {
+      setAssignError("Error de conexión.");
+      setTimeout(() => setAssignError(""), 4000);
+    } finally {
+      setAssigning(null);
+    }
   }
 
   const allNotifications = useMemo(() => {
@@ -235,6 +277,13 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
     );
   }, [allNotifications, search, deviceFilter]);
 
+  // Con contraseña propia solo puede marcarse cobros a sí mismo; con la
+  // compartida puede repartirlos entre todos.
+  const assignableBranches =
+    authScope === "group"
+      ? (branchConfig?.branches ?? []).filter((b) => b.id === activeBranch)
+      : (branchConfig?.branches ?? []);
+
   const unassigned = filtered.filter((n) => !n.branchId);
   const isToday = selectedDate === toLocalDateString(new Date());
   const branchMode = branchConfig?.enabled && activeBranch && activeBranch !== "__selecting__" && activeBranch !== "__readonly__";
@@ -247,7 +296,7 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
         <div className="bg-white rounded-2xl border border-gray-200 p-8 w-full max-w-sm shadow-sm">
           <div className="flex items-center gap-2 mb-6">
             <Lock className="w-5 h-5 text-blue-600" />
-            <h1 className="font-bold text-gray-900">Acceso a sucursales</h1>
+            <h1 className="font-bold text-gray-900">Acceso a {groupLabelPluralLower}</h1>
           </div>
           <form onSubmit={handlePasswordSubmit} className="space-y-4">
             <div>
@@ -264,9 +313,10 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
             </div>
             <button
               type="submit"
-              className="w-full py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
+              disabled={checkingPassword}
+              className="w-full py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-60"
             >
-              Entrar
+              {checkingPassword ? "Verificando..." : "Entrar"}
             </button>
           </form>
           <div className="mt-4 pt-4 border-t border-gray-100 text-center">
@@ -282,12 +332,12 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
     );
   }
 
-  // — Pantalla de selección de sucursal —
+  // — Pantalla de selección de grupo —
   if (branchConfig?.enabled && activeBranch === "__selecting__") {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="bg-white rounded-2xl border border-gray-200 p-8 w-full max-w-sm shadow-sm">
-          <h1 className="font-bold text-gray-900 mb-2">¿Qué sucursal sos?</h1>
+          <h1 className="font-bold text-gray-900 mb-2">¿Qué {groupLabelLower} sos?</h1>
           <p className="text-sm text-gray-400 mb-6">Elegí para marcar tus transferencias</p>
           <div className="space-y-2">
             {branchConfig.branches.map((b) => (
@@ -399,6 +449,12 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
             );
           })}
         </div>
+
+        {assignError && (
+          <div className="mb-4 px-4 py-2.5 bg-red-50 border border-red-200 rounded-xl">
+            <p className="text-sm text-red-700">{assignError}</p>
+          </div>
+        )}
 
         {/* Filtros */}
         <div className="flex flex-wrap gap-3">
@@ -530,7 +586,7 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
 
                             {isOpen && (
                               <div className="absolute right-0 top-full mt-1 bg-white rounded-xl border border-gray-200 shadow-lg z-10 min-w-36 py-1">
-                                {branchConfig!.branches.map((b) => (
+                                {assignableBranches.map((b) => (
                                   <button
                                     key={b.id}
                                     onClick={() => assignBranch(n.id, b.id)}
@@ -540,7 +596,7 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
                                     {b.name}
                                   </button>
                                 ))}
-                                {n.branchId && (
+                                {n.branchId && (authScope === "all" || n.branchId === activeBranch) && (
                                   <>
                                     <div className="border-t border-gray-100 my-1" />
                                     <button

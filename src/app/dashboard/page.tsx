@@ -26,6 +26,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Notification, BranchConfig } from "@/lib/types";
 import { formatCurrency, formatDateShort, extractAmount, checkPlanExpiry } from "@/lib/utils";
+import { branchLabel } from "@/lib/branchLabel";
 import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar, AlertTriangle, FileDown, RefreshCw } from "lucide-react";
 import OnboardingWizard from "@/components/OnboardingWizard";
 import ReportModal from "@/components/ReportModal";
@@ -659,7 +660,7 @@ export default function DashboardPage() {
                   <th className="text-left px-3 md:px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Notificación</th>
                   <th className="text-right px-3 md:px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Monto</th>
                   <th className="hidden sm:table-cell text-right px-3 md:px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Hora</th>
-                  {branchConfig && <th className="hidden sm:table-cell text-left px-3 md:px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Sucursal</th>}
+                  {branchConfig && <th className="hidden sm:table-cell text-left px-3 md:px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">{branchLabel(branchConfig.label)}</th>}
                   <th className="px-2 md:px-6 py-3" />
                 </tr>
               </thead>

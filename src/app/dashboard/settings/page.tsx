@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Copy, Check, ExternalLink, Share2, Smartphone, Globe, Zap, Crown, GitBranch, Plus, Trash2, AlertTriangle } from "lucide-react";
@@ -10,11 +10,20 @@ import { deleteUser } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { BranchConfig } from "@/lib/types";
 import { checkPlanExpiry } from "@/lib/utils";
+import {
+  branchLabel,
+  branchLabelLower,
+  branchLabelPlural,
+  BRANCH_LABEL_PRESETS,
+  DEFAULT_BRANCH_LABEL,
+} from "@/lib/branchLabel";
 
 const BRANCH_COLORS = [
   "#3B82F6", "#10B981", "#F59E0B", "#EF4444",
   "#8B5CF6", "#EC4899", "#14B8A6", "#F97316",
 ];
+
+const MAX_BRANCHES = 20;
 
 interface PlanConfig {
   freeDeviceLimit: number;
@@ -51,11 +60,24 @@ export default function SettingsPage() {
   const [cancelMsg, setCancelMsg] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [branchConfig, setBranchConfig] = useState<BranchConfig>({
     enabled: false,
-    password: "",
     branches: [],
+    label: DEFAULT_BRANCH_LABEL,
+    authMode: "shared",
   });
+  // Las contraseñas no viven en users/{uid} (ese doc lo lee la vista pública):
+  // se cargan y guardan por API, que las mantiene en una colección privada.
+  const [branchSecrets, setBranchSecrets] = useState<{
+    shared: string;
+    perGroup: Record<string, string>;
+  }>({ shared: "", perGroup: {} });
   const [savingBranch, setSavingBranch] = useState(false);
   const [savedBranch, setSavedBranch] = useState(false);
+  const [branchError, setBranchError] = useState("");
+
+  const groupLabel = branchLabel(branchConfig.label);
+  const groupLabelLower = branchLabelLower(branchConfig.label);
+  const groupLabelPlural = branchLabelPlural(branchConfig.label);
+  const authMode = branchConfig.authMode ?? "shared";
 
   const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL}/view/${user?.uid}`;
 
@@ -71,14 +93,36 @@ export default function SettingsPage() {
         setPlanExpiresAt(data.planExpiresAt?.toDate?.() ?? null);
         setBillingMode(data.billingMode ?? (data.mpSubscriptionId ? "auto" : null));
         setPaymentFailed(data.mpLastPaymentFailed === true);
-        if (data.branchConfig) setBranchConfig(data.branchConfig);
+        if (data.branchConfig) {
+          setBranchConfig({
+            label: DEFAULT_BRANCH_LABEL,
+            authMode: "shared",
+            ...data.branchConfig,
+          });
+        }
       }
       if (configSnap.exists()) setPlanConfig(configSnap.data() as PlanConfig);
     }).catch(() => {}).finally(() => setLoadingPlan(false));
+
+    // Contraseñas: solo el dueño autenticado las recibe
+    user.getIdToken()
+      .then((token) =>
+        fetch("/api/branch/config", { headers: { Authorization: `Bearer ${token}` } })
+      )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.secrets) {
+          setBranchSecrets({
+            shared: data.secrets.shared ?? "",
+            perGroup: data.secrets.perGroup ?? {},
+          });
+        }
+      })
+      .catch(() => {});
   }, [user]);
 
   function addBranch() {
-    if (branchConfig.branches.length >= 8) return;
+    if (branchConfig.branches.length >= MAX_BRANCHES) return;
     const id = crypto.randomUUID();
     const color = BRANCH_COLORS[branchConfig.branches.length % BRANCH_COLORS.length];
     setBranchConfig(prev => ({
@@ -104,13 +148,25 @@ export default function SettingsPage() {
   async function saveBranchConfig() {
     if (!user) return;
     setSavingBranch(true);
+    setBranchError("");
     try {
-      await updateDoc(doc(db, "users", user.uid), { branchConfig });
+      const token = await user.getIdToken();
+      const res = await fetch("/api/branch/config", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ branchConfig, secrets: branchSecrets }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setBranchError(data.error ?? "No se pudo guardar.");
+        return;
+      }
+      if (data.branchConfig) setBranchConfig(data.branchConfig);
       setSavedBranch(true);
       setTimeout(() => setSavedBranch(false), 2000);
     } catch (e) {
-      console.error("Error guardando sucursales:", e);
-      alert("Error al guardar. Intentá de nuevo.");
+      console.error("Error guardando la configuración de grupos:", e);
+      setBranchError("Error de conexión. Intentá de nuevo.");
     } finally {
       setSavingBranch(false);
     }
@@ -395,12 +451,14 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Modo sucursales */}
+      {/* Grupos: sucursales, vendedores, turnos... */}
       <section className="bg-white rounded-2xl border border-gray-200 p-5 mb-5">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
             <GitBranch className="w-4 h-4 text-blue-600" />
-            <h2 className="font-semibold text-sm text-gray-900">Modo sucursales</h2>
+            <h2 className="font-semibold text-sm text-gray-900">
+              Sucursales, vendedores y turnos
+            </h2>
             {!isPro && (
               <span className="flex items-center gap-1 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">
                 <Crown className="w-3 h-3" />
@@ -422,7 +480,8 @@ export default function SettingsPage() {
           )}
         </div>
         <p className="text-xs text-gray-400 mb-4">
-          Permitir que cada sucursal marque qué transferencias le pertenecen.
+          Dividí los cobros por local, por vendedor o por turno. Cada uno marca los
+          suyos desde la vista pública y vos ves los totales por separado.
         </p>
 
         {!isPro && (
@@ -435,25 +494,93 @@ export default function SettingsPage() {
         )}
 
         {isPro && branchConfig.enabled && (
-          <div className="space-y-4">
-            {/* Contraseña */}
+          <div className="space-y-5">
+            {/* Cómo se llaman */}
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                Contraseña compartida
+                ¿Cómo querés dividir los cobros?
               </label>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {BRANCH_LABEL_PRESETS.map((preset) => (
+                  <button
+                    key={preset}
+                    onClick={() => setBranchConfig(prev => ({ ...prev, label: preset }))}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                      groupLabel === preset
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    Por {preset.toLowerCase()}
+                  </button>
+                ))}
+              </div>
               <input
                 type="text"
-                value={branchConfig.password}
-                onChange={(e) => setBranchConfig(prev => ({ ...prev, password: e.target.value }))}
+                value={branchConfig.label ?? ""}
+                onChange={(e) => setBranchConfig(prev => ({ ...prev, label: e.target.value }))}
+                placeholder="O escribí otra palabra: Zona, Equipo, Mesa..."
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Ej: local123"
               />
-              <p className="text-xs text-gray-400 mt-1">La misma para todas las sucursales</p>
+              <p className="text-xs text-gray-400 mt-1">
+                Se va a mostrar como &ldquo;{groupLabel}&rdquo; en todo el sistema.
+              </p>
             </div>
 
-            {/* Sucursales */}
+            {/* Modo de acceso */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-2">Sucursales</label>
+              <label className="block text-xs font-medium text-gray-700 mb-2">Acceso</label>
+              <div className="space-y-2">
+                <button
+                  onClick={() => setBranchConfig(prev => ({ ...prev, authMode: "shared" }))}
+                  className={`w-full text-left p-3 rounded-xl border-2 transition-colors ${
+                    authMode === "shared" ? "border-blue-600 bg-blue-50" : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <p className="text-xs font-semibold text-gray-900">Una contraseña para todos</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Ideal para una pantalla compartida en el mostrador. Cualquiera
+                    puede marcar cobros a nombre de cualquier {groupLabelLower}.
+                  </p>
+                </button>
+                <button
+                  onClick={() => setBranchConfig(prev => ({ ...prev, authMode: "perGroup" }))}
+                  className={`w-full text-left p-3 rounded-xl border-2 transition-colors ${
+                    authMode === "perGroup" ? "border-blue-600 bg-blue-50" : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <p className="text-xs font-semibold text-gray-900">
+                    Una contraseña por {groupLabelLower}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Cada uno entra con la suya y solo puede marcar sus propios cobros.
+                    Recomendado si pagás comisiones.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            {/* Contraseña compartida */}
+            {authMode === "shared" && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                  Contraseña
+                </label>
+                <input
+                  type="text"
+                  value={branchSecrets.shared}
+                  onChange={(e) => setBranchSecrets(prev => ({ ...prev, shared: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ej: local123"
+                />
+              </div>
+            )}
+
+            {/* Lista de grupos */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-2">
+                {groupLabelPlural}
+              </label>
               <div className="space-y-2">
                 {branchConfig.branches.map((b) => (
                   <div key={b.id} className="flex items-center gap-2">
@@ -465,32 +592,48 @@ export default function SettingsPage() {
                       type="text"
                       value={b.name}
                       onChange={(e) => updateBranchName(b.id, e.target.value)}
-                      placeholder="Nombre de la sucursal"
-                      className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder={`Nombre ${authMode === "perGroup" ? "" : "de la "}${groupLabelLower}`}
+                      className="flex-1 min-w-0 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
+                    {authMode === "perGroup" && (
+                      <input
+                        type="text"
+                        value={branchSecrets.perGroup[b.id] ?? ""}
+                        onChange={(e) =>
+                          setBranchSecrets(prev => ({
+                            ...prev,
+                            perGroup: { ...prev.perGroup, [b.id]: e.target.value },
+                          }))
+                        }
+                        placeholder="Contraseña"
+                        className="w-28 flex-shrink-0 px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    )}
                     <button
                       onClick={() => removeBranch(b.id)}
-                      className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                      className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 ))}
               </div>
-              {branchConfig.branches.length < 8 && (
+              {branchConfig.branches.length < MAX_BRANCHES && (
                 <button
                   onClick={addBranch}
                   className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 mt-2"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  Agregar sucursal
+                  Agregar {groupLabelLower}
                 </button>
               )}
             </div>
 
+            {branchError && <p className="text-xs text-red-600">{branchError}</p>}
+
             <button
               onClick={saveBranchConfig}
-              disabled={savingBranch || !branchConfig.password.trim() || branchConfig.branches.some(b => !b.name.trim())}
+              disabled={savingBranch}
               className="w-full py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
               {savingBranch ? "Guardando..." : savedBranch ? "¡Guardado!" : "Guardar configuración"}

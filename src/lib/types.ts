@@ -33,10 +33,32 @@ export interface Notification {
   branchId: string | null;
 }
 
+export interface Branch {
+  id: string;
+  name: string;
+  color: string;
+}
+
+/**
+ * Configuración de grupos. Se llama "branch" por historia, pero el dueño elige
+ * cómo se muestran: sucursales, vendedores, turnos, cajas, etc.
+ *
+ * IMPORTANTE: este objeto vive en users/{uid} y lo lee cualquiera que abra la
+ * vista pública. NO debe contener contraseñas. Los secretos van en la colección
+ * privada branchAuth/{uid}, que solo se lee desde el servidor.
+ */
 export interface BranchConfig {
   enabled: boolean;
-  password: string;
-  branches: { id: string; name: string; color: string }[];
+  branches: Branch[];
+  /** Cómo llamar a los grupos en la interfaz. Por defecto "Sucursal". */
+  label?: string;
+  /**
+   * "shared"   — una contraseña para todos; cualquiera puede marcar a nombre de cualquiera.
+   * "perGroup" — una contraseña por grupo; cada uno solo puede marcar lo suyo.
+   */
+  authMode?: "shared" | "perGroup";
+  /** @deprecated Contraseña vieja en texto plano. Se migra a branchAuth al guardar. */
+  password?: string;
 }
 
 export interface WebhookSource {

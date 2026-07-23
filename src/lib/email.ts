@@ -1,12 +1,39 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+/**
+ * Cliente de Resend perezoso. Antes se instanciaba al importar el módulo, y como
+ * el constructor lanza si falta la API key, cualquier build sin esa variable
+ * fallaba entero. Ahora se crea recién al enviar y, si no está configurada, se
+ * omite el envío sin tumbar nada.
+ */
+let resendClient: Resend | null = null;
+
+function getResend(): Resend | null {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return null;
+  if (!resendClient) resendClient = new Resend(key);
+  return resendClient;
+}
+
+async function sendEmail(options: {
+  from: string;
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<void> {
+  const client = getResend();
+  if (!client) {
+    console.warn("[email] RESEND_API_KEY no configurada — se omite el envío:", options.subject);
+    return;
+  }
+  await client.emails.send(options);
+}
 
 const FROM = "NListener <nlistener@estamoscerca.com.ar>";
 const ADMIN_EMAIL = "tdsdeveloper00@gmail.com";
 
 export async function sendNewUserEmail(name: string, email: string) {
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to: ADMIN_EMAIL,
     subject: "🆕 Nuevo usuario registrado — NListener",
@@ -38,7 +65,7 @@ export async function sendNewUserEmail(name: string, email: string) {
 }
 
 export async function sendNewSubscriberEmail(email: string, subscriptionId: string) {
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to: ADMIN_EMAIL,
     subject: "💰 Nueva suscripción Pro — NListener",
@@ -70,7 +97,7 @@ export async function sendNewSubscriberEmail(email: string, subscriptionId: stri
 }
 
 export async function sendCancellationEmail(email: string) {
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to: ADMIN_EMAIL,
     subject: "⚠️ Suscripción cancelada — NListener",
@@ -108,7 +135,7 @@ function userEmailWrapper(title: string, color: string, bodyHtml: string) {
 // Primera vez que se activa la suscripción Pro
 export async function sendWelcomeProEmail(email: string) {
   if (!email) return;
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to: email,
     subject: "🎉 ¡Bienvenido a NListener Pro!",
@@ -133,7 +160,7 @@ export async function sendWelcomeProEmail(email: string) {
 // Se renovó el pago mensual con éxito
 export async function sendPaymentRenewedEmail(email: string, amount: number) {
   if (!email) return;
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to: email,
     subject: "✅ Tu suscripción Pro de NListener se renovó",
@@ -155,7 +182,7 @@ export async function sendPaymentRenewedEmail(email: string, amount: number) {
 // El cobro automático del mes falló (tarjeta rechazada, fondos insuficientes, etc.)
 export async function sendPaymentFailedEmail(email: string) {
   if (!email) return;
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to: email,
     subject: "⚠️ No pudimos procesar el pago de tu suscripción NListener",
@@ -188,7 +215,7 @@ export async function sendUserCancellationEmail(email: string, reason: "manual" 
     ? "por no haberse podido procesar el pago luego de varios intentos"
     : "a pedido tuyo o de tu medio de pago";
 
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to: email,
     subject: "Tu suscripción Pro de NListener fue cancelada",
