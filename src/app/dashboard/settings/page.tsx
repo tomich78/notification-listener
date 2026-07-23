@@ -44,6 +44,11 @@ export default function SettingsPage() {
   const [couponCode, setCouponCode] = useState("");
   const [redeeming, setRedeeming] = useState(false);
   const [redeemMsg, setRedeemMsg] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+  const [billingMode, setBillingMode] = useState<"auto" | "manual" | null>(null);
+  const [paymentFailed, setPaymentFailed] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [cancelMsg, setCancelMsg] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [branchConfig, setBranchConfig] = useState<BranchConfig>({
     enabled: false,
     password: "",
@@ -64,6 +69,8 @@ export default function SettingsPage() {
         const data = userSnap.data();
         setUserPlan(await checkPlanExpiry(db, user.uid, data));
         setPlanExpiresAt(data.planExpiresAt?.toDate?.() ?? null);
+        setBillingMode(data.billingMode ?? (data.mpSubscriptionId ? "auto" : null));
+        setPaymentFailed(data.mpLastPaymentFailed === true);
         if (data.branchConfig) setBranchConfig(data.branchConfig);
       }
       if (configSnap.exists()) setPlanConfig(configSnap.data() as PlanConfig);
@@ -160,6 +167,36 @@ export default function SettingsPage() {
     }
   }
 
+  async function cancelSubscription() {
+    if (!user || cancelling) return;
+    setCancelling(true);
+    setCancelMsg(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/mp/cancel", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCancelMsg({ type: "error", text: data.error ?? "No pudimos cancelar la suscripción." });
+      } else {
+        const until = new Date(data.accessUntil);
+        setBillingMode("manual");
+        setPlanExpiresAt(until);
+        setShowCancelConfirm(false);
+        setCancelMsg({
+          type: "ok",
+          text: `Listo, no se te va a cobrar más. Mantenés el Plan Pro hasta el ${until.toLocaleDateString("es-AR")}.`,
+        });
+      }
+    } catch {
+      setCancelMsg({ type: "error", text: "Error de conexión. Intentá de nuevo." });
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   const isPro = userPlan === "pro";
 
   return (
@@ -172,19 +209,95 @@ export default function SettingsPage() {
       {/* Plan actual */}
       {!loadingPlan && (
         isPro ? (
-          <section className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-2xl p-5 mb-5 text-white">
-            <div className="flex items-center gap-2 mb-1">
-              <Crown className="w-4 h-4" />
-              <h2 className="font-semibold text-sm">Plan Pro</h2>
-            </div>
-            <p className="text-xs text-white/70">
-              Hasta {planConfig.proDeviceLimit} dispositivos · Notificaciones ilimitadas
-            </p>
-            {planExpiresAt && (
-              <p className="text-xs text-white/70 mt-1">
-                Activado por cupón · vence el {planExpiresAt.toLocaleDateString("es-AR")}
+          <section className="rounded-2xl mb-5 overflow-hidden border border-gray-200">
+            <div className="bg-gradient-to-r from-purple-600 to-blue-600 p-5 text-white">
+              <div className="flex items-center gap-2 mb-1">
+                <Crown className="w-4 h-4" />
+                <h2 className="font-semibold text-sm">Plan Pro</h2>
+              </div>
+              <p className="text-xs text-white/70">
+                Hasta {planConfig.proDeviceLimit} dispositivos · Notificaciones ilimitadas
               </p>
-            )}
+              <p className="text-xs text-white/70 mt-1">
+                {billingMode === "auto"
+                  ? "Débito automático activo · se renueva solo cada mes"
+                  : planExpiresAt
+                    ? `Acceso hasta el ${planExpiresAt.toLocaleDateString("es-AR")}`
+                    : "Activo"}
+              </p>
+            </div>
+
+            {/* Gestión del pago */}
+            <div className="bg-white p-4">
+              {paymentFailed && (
+                <div className="flex items-start gap-2 mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-800">
+                    No pudimos procesar tu último pago. MercadoPago va a reintentarlo en los
+                    próximos días. Revisá el medio de pago para no perder el acceso.
+                  </p>
+                </div>
+              )}
+
+              {cancelMsg && (
+                <p className={`text-xs mb-3 ${cancelMsg.type === "ok" ? "text-green-600" : "text-red-600"}`}>
+                  {cancelMsg.text}
+                </p>
+              )}
+
+              {billingMode === "auto" ? (
+                showCancelConfirm ? (
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                    <p className="text-xs text-gray-700 mb-3">
+                      Si das de baja el débito automático no se te cobra más, y seguís con el
+                      Plan Pro hasta que termine el período que ya pagaste.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={cancelSubscription}
+                        disabled={cancelling}
+                        className="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                      >
+                        {cancelling ? "Cancelando..." : "Sí, dar de baja"}
+                      </button>
+                      <button
+                        onClick={() => setShowCancelConfirm(false)}
+                        disabled={cancelling}
+                        className="px-3 py-1.5 border border-gray-200 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        Mantener suscripción
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs text-gray-500">
+                      Tu suscripción se renueva automáticamente todos los meses.
+                    </p>
+                    <button
+                      onClick={() => setShowCancelConfirm(true)}
+                      className="text-xs text-gray-400 hover:text-red-600 transition-colors flex-shrink-0 underline"
+                    >
+                      Dar de baja
+                    </button>
+                  </div>
+                )
+              ) : (
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-gray-500">
+                    {planExpiresAt
+                      ? "Sin cobros automáticos. Renovalo cuando quieras antes del vencimiento."
+                      : "Sin cobros automáticos."}
+                  </p>
+                  <a
+                    href="/upgrade"
+                    className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors flex-shrink-0"
+                  >
+                    Renovar
+                  </a>
+                </div>
+              )}
+            </div>
           </section>
         ) : (
           <section className="bg-white rounded-2xl border border-gray-200 p-5 mb-5">

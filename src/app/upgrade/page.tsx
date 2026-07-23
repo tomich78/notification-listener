@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
-import { Crown, Check, ArrowLeft } from "lucide-react";
+import { Crown, Check, ArrowLeft, RefreshCw, CalendarCheck } from "lucide-react";
 import { annualMonthlyPrice, annualTotalPrice, annualSavings, ANNUAL_DISCOUNT_PCT } from "@/lib/pricing";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -31,6 +31,7 @@ export default function UpgradePage() {
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState(false);
   const [period, setPeriod] = useState<"monthly" | "annual">("monthly");
+  const [mode, setMode] = useState<"auto" | "manual">("auto");
 
   // Anual: se paga de una vez por año, con descuento sobre el precio mensual
   const annualMonthly = annualMonthlyPrice(planConfig.proPrice);
@@ -88,26 +89,69 @@ export default function UpgradePage() {
 
         {/* Card */}
         <div className="bg-white rounded-2xl border-2 border-blue-600 p-6 mb-4 shadow-lg">
-          {/* Selector mensual / anual */}
-          <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-5">
+          {/* Modalidad de pago */}
+          <p className="text-xs font-medium text-gray-500 mb-2">¿Cómo querés pagar?</p>
+          <div className="space-y-2 mb-5">
             <button
-              onClick={() => setPeriod("monthly")}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                period === "monthly" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              onClick={() => { setMode("auto"); setPeriod("monthly"); }}
+              className={`w-full text-left p-3 rounded-xl border-2 transition-colors ${
+                mode === "auto" ? "border-blue-600 bg-blue-50" : "border-gray-200 hover:border-gray-300"
               }`}
             >
-              Mensual
+              <div className="flex items-center gap-2">
+                <RefreshCw className={`w-4 h-4 ${mode === "auto" ? "text-blue-600" : "text-gray-400"}`} />
+                <span className="text-sm font-semibold text-gray-900">Débito automático</span>
+                <span className="text-[10px] font-bold bg-blue-600 text-white px-1.5 py-0.5 rounded ml-auto">
+                  RECOMENDADO
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1 ml-6">
+                Se cobra solo todos los meses. No te quedás sin servicio por olvido.
+                Lo cancelás cuando quieras desde tu cuenta.
+              </p>
             </button>
+
             <button
-              onClick={() => setPeriod("annual")}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
-                period === "annual" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              onClick={() => setMode("manual")}
+              className={`w-full text-left p-3 rounded-xl border-2 transition-colors ${
+                mode === "manual" ? "border-blue-600 bg-blue-50" : "border-gray-200 hover:border-gray-300"
               }`}
             >
-              Anual
-              <span className="text-[10px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded">-{ANNUAL_DISCOUNT_PCT}%</span>
+              <div className="flex items-center gap-2">
+                <CalendarCheck className={`w-4 h-4 ${mode === "manual" ? "text-blue-600" : "text-gray-400"}`} />
+                <span className="text-sm font-semibold text-gray-900">Pago único</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1 ml-6">
+                Pagás una vez y listo. No se te cobra nada automáticamente:
+                renovás vos cuando se venza.
+              </p>
             </button>
           </div>
+
+          {/* Período — solo para pago único */}
+          {mode === "manual" && (
+            <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-5">
+              <button
+                onClick={() => setPeriod("monthly")}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  period === "monthly" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                1 mes
+              </button>
+              <button
+                onClick={() => setPeriod("annual")}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                  period === "annual" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                1 año
+                <span className="text-[10px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                  -{ANNUAL_DISCOUNT_PCT}%
+                </span>
+              </button>
+            </div>
+          )}
 
           <div className="flex items-end gap-1 mb-1">
             <span className="text-4xl font-bold text-gray-900">
@@ -115,12 +159,17 @@ export default function UpgradePage() {
             </span>
             <span className="text-gray-400 text-sm mb-1">/mes</span>
           </div>
-          {period === "monthly" ? (
-            <p className="text-xs text-gray-400 mb-6">Pago mensual · Cancelá cuando quieras</p>
-          ) : (
+          {period === "annual" ? (
             <p className="text-xs text-gray-400 mb-6">
               Un pago de <span className="font-semibold text-gray-600">${annualTotal.toLocaleString("es-AR")}</span> por
-              año · Ahorrás ${savings.toLocaleString("es-AR")}
+              12 meses · Ahorrás ${savings.toLocaleString("es-AR")}
+            </p>
+          ) : mode === "auto" ? (
+            <p className="text-xs text-gray-400 mb-6">Se renueva solo cada mes · Cancelás cuando quieras</p>
+          ) : (
+            <p className="text-xs text-gray-400 mb-6">
+              Un pago de <span className="font-semibold text-gray-600">${planConfig.proPrice.toLocaleString("es-AR")}</span> por
+              1 mes · Sin cobros automáticos
             </p>
           )}
 
@@ -145,7 +194,10 @@ export default function UpgradePage() {
               setSubscribing(true);
               try {
                 const token = await user.getIdToken();
-                const res = await fetch("/api/mp/subscribe", {
+                // Débito automático → suscripción recurrente.
+                // Pago único → checkout de un solo pago, sin cobros futuros.
+                const endpoint = mode === "auto" ? "/api/mp/subscribe" : "/api/mp/checkout";
+                const res = await fetch(endpoint, {
                   method: "POST",
                   headers: {
                     Authorization: `Bearer ${token}`,
@@ -175,12 +227,14 @@ export default function UpgradePage() {
             )}
             {subscribing
               ? "Redirigiendo a MercadoPago..."
-              : period === "annual" ? "Suscribirme por un año" : "Suscribirme ahora"}
+              : mode === "auto"
+                ? "Activar débito automático"
+                : period === "annual" ? "Pagar 1 año" : "Pagar 1 mes"}
           </button>
           <p className="text-[11px] text-gray-400 text-center mt-3">
-            {period === "annual"
-              ? "Se cobra una vez por año y se renueva automáticamente. Cancelás cuando quieras."
-              : "Se cobra todos los meses automáticamente. Cancelás cuando quieras."}
+            {mode === "auto"
+              ? "Se cobra todos los meses automáticamente. Podés darte de baja desde Configuración en cualquier momento."
+              : "Es un pago único: no se te va a cobrar nada de forma automática. Te avisamos por mail antes del vencimiento."}
           </p>
         </div>
 

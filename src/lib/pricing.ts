@@ -26,3 +26,26 @@ export function annualTotalPrice(monthlyPrice: number): number {
 export function annualSavings(monthlyPrice: number): number {
   return monthlyPrice * 12 - annualTotalPrice(monthlyPrice);
 }
+
+/** Período de un pago manual (pago único, sin débito automático). */
+export type ManualPeriod = "monthly" | "annual";
+
+/** Precio total a cobrar en un pago único, según el período. */
+export function manualPrice(monthlyPrice: number, period: ManualPeriod): number {
+  return period === "annual" ? annualTotalPrice(monthlyPrice) : monthlyPrice;
+}
+
+/** Meses de acceso que otorga un pago manual. */
+export function manualMonths(period: ManualPeriod): number {
+  return period === "annual" ? 12 : 1;
+}
+
+/**
+ * Suma meses a una fecha. Si el usuario ya tiene plan vigente, el tiempo nuevo
+ * se acumula sobre el vencimiento actual en vez de pisarlo.
+ */
+export function addMonths(from: Date, months: number): Date {
+  const d = new Date(from);
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
