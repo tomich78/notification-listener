@@ -27,7 +27,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Notification, BranchConfig } from "@/lib/types";
 import { formatCurrency, formatDateShort, extractAmount, checkPlanExpiry } from "@/lib/utils";
 import { branchLabel } from "@/lib/branchLabel";
-import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar, AlertTriangle, FileDown, RefreshCw } from "lucide-react";
+import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar, AlertTriangle, FileDown, RefreshCw, Clock } from "lucide-react";
 import OnboardingWizard from "@/components/OnboardingWizard";
 import ReportModal from "@/components/ReportModal";
 
@@ -95,6 +95,8 @@ export default function DashboardPage() {
   const [searchPool, setSearchPool] = useState<Notification[] | null>(null);
   const [deepSearching, setDeepSearching] = useState(false);
   const [deepSearchLabel, setDeepSearchLabel] = useState("");
+  const [hourFrom, setHourFrom] = useState("");
+  const [hourTo, setHourTo] = useState("");
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -312,6 +314,19 @@ export default function DashboardPage() {
 
   const filtered = useMemo(() => {
     let base = searchPool ?? allNotifications;
+    // Filtro por hora del día (turnos). Se aplica sobre lo cargado.
+    const hf = hourFrom === "" ? null : parseInt(hourFrom, 10);
+    const ht = hourTo === "" ? null : parseInt(hourTo, 10);
+    if (hf !== null || ht !== null) {
+      base = base.filter((n) => {
+        const d = n.timestamp instanceof Date ? n.timestamp : n.timestamp?.toDate?.();
+        if (!d) return false;
+        const h = d.getHours();
+        if (hf !== null && h < hf) return false;
+        if (ht !== null && h > ht) return false;
+        return true;
+      });
+    }
     if (deviceFilter) base = base.filter((n) => n.deviceName === deviceFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -322,7 +337,7 @@ export default function DashboardPage() {
       );
     }
     return base;
-  }, [allNotifications, searchPool, search, deviceFilter]);
+  }, [allNotifications, searchPool, search, deviceFilter, hourFrom, hourTo]);
 
   // Resetear selección y búsqueda profunda cuando cambia el filtro o fecha
   useEffect(() => {
@@ -565,35 +580,51 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Fila 2: fecha + dispositivo */}
-          {(filter === "date" || uniqueDevices.length > 1) && (
-            <div className="flex flex-wrap gap-2">
-              {filter === "date" && (
-                <div className="relative flex-shrink-0">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    max={toLocalDateString(new Date())}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              )}
-              {uniqueDevices.length > 1 && (
-                <select
-                  value={deviceFilter}
-                  onChange={(e) => setDeviceFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                >
-                  <option value="">Todos los dispositivos</option>
-                  {uniqueDevices.map((d) => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
+          {/* Fila 2: fecha + horario + dispositivo */}
+          <div className="flex flex-wrap gap-2">
+            {filter === "date" && (
+              <div className="relative flex-shrink-0">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <input
+                  type="date"
+                  value={selectedDate}
+                  max={toLocalDateString(new Date())}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+            {/* Horario (turnos) */}
+            <div className="flex items-center gap-1.5 border border-gray-200 rounded-xl px-3 py-1.5 bg-white">
+              <Clock className="w-4 h-4 text-gray-400" />
+              <select value={hourFrom} onChange={(e) => setHourFrom(e.target.value)} className="text-sm text-gray-700 bg-transparent focus:outline-none">
+                <option value="">Desde</option>
+                {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+              </select>
+              <span className="text-xs text-gray-300">–</span>
+              <select value={hourTo} onChange={(e) => setHourTo(e.target.value)} className="text-sm text-gray-700 bg-transparent focus:outline-none">
+                <option value="">Hasta</option>
+                {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:59</option>)}
+              </select>
+              {(hourFrom !== "" || hourTo !== "") && (
+                <button onClick={() => { setHourFrom(""); setHourTo(""); }} className="text-gray-300 hover:text-gray-500">
+                  <X className="w-3.5 h-3.5" />
+                </button>
               )}
             </div>
-          )}
+            {uniqueDevices.length > 1 && (
+              <select
+                value={deviceFilter}
+                onChange={(e) => setDeviceFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="">Todos los dispositivos</option>
+                {uniqueDevices.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            )}
+          </div>
 
           {/* Fila 3: buscador + botón búsqueda profunda */}
           <div className="flex gap-2">

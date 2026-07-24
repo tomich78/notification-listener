@@ -22,7 +22,10 @@ export default function ReportModal({ userId, onClose }: Props) {
   const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set());
   const [branchConfig, setBranchConfig] = useState<BranchConfig | null>(null);
   const [selectedBranches, setSelectedBranches] = useState<Set<string>>(new Set());
-  const [date, setDate] = useState(toLocalDateString(new Date()));
+  const [dateFrom, setDateFrom] = useState(toLocalDateString(new Date()));
+  const [dateTo, setDateTo] = useState(toLocalDateString(new Date()));
+  const [hourFrom, setHourFrom] = useState("");
+  const [hourTo, setHourTo] = useState("");
   const [generating, setGenerating] = useState(false);
   const [loadingDevices, setLoadingDevices] = useState(true);
 
@@ -67,19 +70,33 @@ export default function ReportModal({ userId, onClose }: Props) {
   async function generatePDF() {
     setGenerating(true);
     try {
-      // Traer notificaciones del día seleccionado
-      const startOfDay = new Date(date + "T00:00:00");
-      const endOfDay = new Date(date + "T23:59:59");
+      // Traer notificaciones del rango de fechas seleccionado
+      const startOfRange = new Date(dateFrom + "T00:00:00");
+      const endOfRange = new Date(dateTo + "T23:59:59.999");
 
       const snap = await getDocs(query(
         collection(db, "notifications"),
         where("userId", "==", userId),
-        where("timestamp", ">=", startOfDay),
-        where("timestamp", "<=", endOfDay),
+        where("timestamp", ">=", startOfRange),
+        where("timestamp", "<=", endOfRange),
         orderBy("timestamp", "asc")
       ));
 
       let notifications = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Notification[];
+
+      // Filtrar por horario (turnos) del lado del cliente
+      const hf = hourFrom === "" ? null : parseInt(hourFrom, 10);
+      const ht = hourTo === "" ? null : parseInt(hourTo, 10);
+      if (hf !== null || ht !== null) {
+        notifications = notifications.filter(n => {
+          const d = n.timestamp instanceof Date ? n.timestamp : (n.timestamp as { toDate?: () => Date })?.toDate?.();
+          if (!d) return false;
+          const h = d.getHours();
+          if (hf !== null && h < hf) return false;
+          if (ht !== null && h > ht) return false;
+          return true;
+        });
+      }
 
       // Filtrar por dispositivos seleccionados (incluir manuales si no hay deviceId)
       if (selectedDevices.size < devices.length) {
@@ -100,9 +117,15 @@ export default function ReportModal({ userId, onClose }: Props) {
       const { default: autoTable } = await import("jspdf-autotable");
 
       const doc = new jsPDF();
-      const dateFormatted = new Date(date + "T12:00:00").toLocaleDateString("es-AR", {
+      const fmtDay = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("es-AR", {
         weekday: "long", year: "numeric", month: "long", day: "numeric"
       });
+      const dateFormatted = dateFrom === dateTo
+        ? fmtDay(dateFrom)
+        : `${fmtDay(dateFrom)} — ${fmtDay(dateTo)}`;
+      const hourLabel = (hourFrom !== "" || hourTo !== "")
+        ? `Horario: ${hourFrom !== "" ? String(hourFrom).padStart(2, "0") + ":00" : "inicio"} a ${hourTo !== "" ? String(hourTo).padStart(2, "0") + ":59" : "fin"}`
+        : "";
       const total = notifications.reduce((s, n) => s + (n.amount ?? 0), 0);
       const totalStr = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(total);
 
@@ -119,12 +142,19 @@ export default function ReportModal({ userId, onClose }: Props) {
 
       // Fecha
       doc.setTextColor(50, 50, 50);
-      doc.setFontSize(13);
+      doc.setFontSize(dateFrom === dateTo ? 13 : 11);
       doc.setFont("helvetica", "bold");
       doc.text(dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1), 14, 40);
 
-      // Subtítulos: dispositivos y/o sucursales
+      // Subtítulos: horario, dispositivos y/o grupos
       let subtitleY = 48;
+      if (hourLabel) {
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(100, 100, 100);
+        doc.text(hourLabel, 14, subtitleY);
+        subtitleY += 6;
+      }
       if (selectedDevices.size < devices.length) {
         const names = devices.filter(d => selectedDevices.has(d.id)).map(d => d.name).join(", ");
         doc.setFontSize(9);
@@ -147,7 +177,7 @@ export default function ReportModal({ userId, onClose }: Props) {
       doc.setTextColor(37, 99, 235);
       doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
-      doc.text("TOTAL DEL DÍA", 22, 62);
+      doc.text(dateFrom === dateTo ? "TOTAL DEL DÍA" : "TOTAL DEL PERÍODO", 22, 62);
       doc.setFontSize(16);
       doc.setFont("helvetica", "bold");
       doc.text(totalStr, 22, 72);
@@ -217,7 +247,7 @@ export default function ReportModal({ userId, onClose }: Props) {
         doc.text(`Página ${i} de ${pageCount}`, 196, 290, { align: "right" });
       }
 
-      doc.save(`reporte-${date}.pdf`);
+      doc.save(dateFrom === dateTo ? `reporte-${dateFrom}.pdf` : `reporte-${dateFrom}_a_${dateTo}.pdf`);
     } finally {
       setGenerating(false);
     }
@@ -238,16 +268,53 @@ export default function ReportModal({ userId, onClose }: Props) {
         </div>
 
         <div className="space-y-4">
-          {/* Fecha */}
+          {/* Rango de fechas */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Fecha</label>
-            <input
-              type="date"
-              value={date}
-              max={toLocalDateString(new Date())}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Período</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={dateFrom}
+                max={dateTo}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <span className="text-xs text-gray-400">a</span>
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom}
+                max={toLocalDateString(new Date())}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          {/* Horario (turnos) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Horario <span className="text-gray-400 font-normal">(opcional)</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <select
+                value={hourFrom}
+                onChange={(e) => setHourFrom(e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Desde el inicio</option>
+                {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+              </select>
+              <span className="text-xs text-gray-400">a</span>
+              <select
+                value={hourTo}
+                onChange={(e) => setHourTo(e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Hasta el fin</option>
+                {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:59</option>)}
+              </select>
+            </div>
           </div>
 
           {/* Dispositivos */}
