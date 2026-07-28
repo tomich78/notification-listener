@@ -27,7 +27,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Notification, BranchConfig, PublicFilter } from "@/lib/types";
 import { formatCurrency, formatDateShort, extractAmount, checkPlanExpiry } from "@/lib/utils";
 import { branchLabel } from "@/lib/branchLabel";
-import { isHiddenForEveryone } from "@/lib/visibilityFilter";
+import { isHiddenForEveryone, normalizePublicFilter } from "@/lib/visibilityFilter";
 import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar, AlertTriangle, FileDown, RefreshCw, Clock, EyeOff } from "lucide-react";
 import OnboardingWizard from "@/components/OnboardingWizard";
 import ReportModal from "@/components/ReportModal";
@@ -142,7 +142,7 @@ export default function DashboardPage() {
     getDoc(doc(db, "users", user.uid)).then(async (snap) => {
       const data = snap.data();
       if (data?.branchConfig?.enabled) setBranchConfig(data.branchConfig as BranchConfig);
-      if (data?.publicFilter?.enabled) setPublicFilter(data.publicFilter as PublicFilter);
+      if (data?.publicFilter?.enabled) setPublicFilter(normalizePublicFilter(data.publicFilter));
       setUserPlan(await checkPlanExpiry(db, user.uid, data ?? {}));
     });
     getDoc(doc(db, "config", "plans")).then((snap) => {

@@ -6,7 +6,7 @@ import { db } from "@/lib/firebase";
 import { Notification, BranchConfig, PublicFilter } from "@/lib/types";
 import { formatCurrency, formatDateShort } from "@/lib/utils";
 import { branchLabelLower, branchLabelPluralLower } from "@/lib/branchLabel";
-import { visibleForViewer } from "@/lib/visibilityFilter";
+import { visibleForViewer, anyGroupRestricted, normalizePublicFilter } from "@/lib/visibilityFilter";
 import { Bell, Globe, Smartphone, Search, Calendar, Lock, ChevronDown, RefreshCw, FileDown, Clock, Eye, EyeOff, X } from "lucide-react";
 import Image from "next/image";
 import ReportModal from "@/components/ReportModal";
@@ -71,7 +71,7 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
         setBranchConfig(data.branchConfig as BranchConfig);
       }
       if (data.publicFilter?.enabled) {
-        setPublicFilter(data.publicFilter as PublicFilter);
+        setPublicFilter(normalizePublicFilter(data.publicFilter));
       }
       const expiresAt = data.planExpiresAt?.toDate?.();
       const isPro = data.plan === "pro" && (!expiresAt || expiresAt > new Date());
@@ -291,8 +291,8 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
               {checkingPassword ? "Verificando..." : "Entrar"}
             </button>
           </form>
-          {/* En modo lista blanca no hay vista abierta: solo entra quien tiene contraseña. */}
-          {publicFilter?.mode !== "whitelist" && (
+          {/* Si algún grupo ve solo su lista, no hay vista abierta: solo con contraseña. */}
+          {!anyGroupRestricted(publicFilter) && (
             <div className="mt-4 pt-4 border-t border-gray-100 text-center">
               <button
                 onClick={enterReadOnly}
@@ -331,10 +331,10 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
     );
   }
 
-  // Fail-closed: la lista blanca depende de saber qué vendedor mira. Si está
-  // activa pero el modo por vendedor no está configurado, no mostramos nada
-  // en vez de mostrar todo por error.
-  if (publicFilter?.enabled && publicFilter.mode === "whitelist" && !branchConfig?.enabled) {
+  // Fail-closed: la restricción por vendedor depende de saber quién mira. Si hay
+  // algún grupo restringido pero el modo por vendedor no está configurado, no
+  // mostramos nada en vez de mostrar todo por error.
+  if (anyGroupRestricted(publicFilter) && !branchConfig?.enabled) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="bg-white rounded-2xl border border-gray-200 p-8 w-full max-w-sm text-center shadow-sm">
@@ -700,7 +700,11 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
           userId={uid}
           onClose={() => setShowReport(false)}
           publicFilter={publicFilter}
-          lockedBranchId={authScope === "group" ? branchForFilter : null}
+          lockedBranchId={
+            authScope === "group" && branchForFilter &&
+            publicFilter?.groups?.[branchForFilter]?.visibility === "restricted"
+              ? branchForFilter : null
+          }
         />
       )}
     </div>

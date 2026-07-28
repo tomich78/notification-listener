@@ -17,6 +17,7 @@ import {
   BRANCH_LABEL_PRESETS,
   DEFAULT_BRANCH_LABEL,
 } from "@/lib/branchLabel";
+import { normalizePublicFilter } from "@/lib/visibilityFilter";
 
 const BRANCH_COLORS = [
   "#3B82F6", "#10B981", "#F59E0B", "#EF4444",
@@ -74,22 +75,25 @@ export default function SettingsPage() {
   const [savedBranch, setSavedBranch] = useState(false);
   const [branchError, setBranchError] = useState("");
 
-  // Filtro de visibilidad (ocultar cobros a los empleados)
+  // Filtro de visibilidad (qué ven los empleados)
   const [publicFilter, setPublicFilter] = useState<PublicFilter>({
     enabled: false,
-    mode: "blacklist",
     blacklist: [],
-    whitelists: {},
+    sharedWhitelist: [],
+    groups: {},
   });
-  const [newTerm, setNewTerm] = useState("");
-  const [wlInput, setWlInput] = useState<Record<string, string>>({});
+  const [newTerm, setNewTerm] = useState("");        // input lista negra
+  const [sharedInput, setSharedInput] = useState(""); // input lista general
+  const [wlInput, setWlInput] = useState<Record<string, string>>({}); // input por grupo
   const [savingFilter, setSavingFilter] = useState(false);
   const [savedFilter, setSavedFilter] = useState(false);
 
   const groupLabel = branchLabel(branchConfig.label);
   const groupLabelLower = branchLabelLower(branchConfig.label);
   const groupLabelPlural = branchLabelPlural(branchConfig.label);
+  const groupLabelPluralLower = groupLabelPlural.toLowerCase();
   const authMode = branchConfig.authMode ?? "shared";
+  const anyRestricted = Object.values(publicFilter.groups ?? {}).some(g => g?.visibility === "restricted");
 
   const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL}/view/${user?.uid}`;
 
@@ -113,13 +117,8 @@ export default function SettingsPage() {
           });
         }
         if (data.publicFilter) {
-          setPublicFilter({
-            enabled: false,
-            mode: "blacklist",
-            blacklist: [],
-            whitelists: {},
-            ...data.publicFilter,
-          });
+          const normalized = normalizePublicFilter(data.publicFilter);
+          if (normalized) setPublicFilter(normalized);
         }
       }
       if (configSnap.exists()) setPlanConfig(configSnap.data() as PlanConfig);
@@ -193,40 +192,54 @@ export default function SettingsPage() {
     }
   }
 
+  // — Lista negra (ocultar a todos) —
   function addFilterTerm() {
     const t = newTerm.trim();
     if (!t) return;
-    if (publicFilter.blacklist.some(x => x.toLowerCase() === t.toLowerCase())) {
-      setNewTerm("");
-      return;
-    }
+    if (publicFilter.blacklist.some(x => x.toLowerCase() === t.toLowerCase())) { setNewTerm(""); return; }
     setPublicFilter(prev => ({ ...prev, blacklist: [...prev.blacklist, t] }));
     setNewTerm("");
   }
-
   function removeFilterTerm(term: string) {
     setPublicFilter(prev => ({ ...prev, blacklist: prev.blacklist.filter(t => t !== term) }));
   }
 
+  // — Lista general (todos los restringidos la ven) —
+  function addSharedTerm() {
+    const t = sharedInput.trim();
+    if (!t) return;
+    const cur = publicFilter.sharedWhitelist ?? [];
+    if (cur.some(x => x.toLowerCase() === t.toLowerCase())) { setSharedInput(""); return; }
+    setPublicFilter(prev => ({ ...prev, sharedWhitelist: [...(prev.sharedWhitelist ?? []), t] }));
+    setSharedInput("");
+  }
+  function removeSharedTerm(term: string) {
+    setPublicFilter(prev => ({ ...prev, sharedWhitelist: (prev.sharedWhitelist ?? []).filter(t => t !== term) }));
+  }
+
+  // — Configuración por grupo —
+  function setGroupVisibility(branchId: string, visibility: "full" | "restricted") {
+    setPublicFilter(prev => {
+      const g = prev.groups?.[branchId] ?? { visibility: "full" as const };
+      return { ...prev, groups: { ...prev.groups, [branchId]: { ...g, visibility } } };
+    });
+  }
   function addWhitelistTerm(branchId: string) {
     const t = (wlInput[branchId] ?? "").trim();
     if (!t) return;
     setPublicFilter(prev => {
-      const current = prev.whitelists?.[branchId] ?? [];
+      const g = prev.groups?.[branchId] ?? { visibility: "restricted" as const, whitelist: [] };
+      const current = g.whitelist ?? [];
       if (current.some(x => x.toLowerCase() === t.toLowerCase())) return prev;
-      return { ...prev, whitelists: { ...prev.whitelists, [branchId]: [...current, t] } };
+      return { ...prev, groups: { ...prev.groups, [branchId]: { ...g, whitelist: [...current, t] } } };
     });
     setWlInput(prev => ({ ...prev, [branchId]: "" }));
   }
-
   function removeWhitelistTerm(branchId: string, term: string) {
-    setPublicFilter(prev => ({
-      ...prev,
-      whitelists: {
-        ...prev.whitelists,
-        [branchId]: (prev.whitelists?.[branchId] ?? []).filter(t => t !== term),
-      },
-    }));
+    setPublicFilter(prev => {
+      const g = prev.groups?.[branchId] ?? { visibility: "restricted" as const, whitelist: [] };
+      return { ...prev, groups: { ...prev.groups, [branchId]: { ...g, whitelist: (g.whitelist ?? []).filter(t => t !== term) } } };
+    });
   }
 
   async function savePublicFilter(next: PublicFilter) {
@@ -750,128 +763,160 @@ export default function SettingsPage() {
         </p>
 
         {publicFilter.enabled && (
-          <div className="space-y-4">
-            {/* Selector de modo */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button
-                onClick={() => setPublicFilter(prev => ({ ...prev, mode: "blacklist" }))}
-                className={`text-left p-3 rounded-xl border-2 transition-colors ${
-                  publicFilter.mode === "blacklist" ? "border-blue-600 bg-blue-50" : "border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                <p className="text-xs font-semibold text-gray-900">Ocultar algunos (lista negra)</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Se ve todo salvo lo que agregues. La vista pública sigue abierta.
-                </p>
-              </button>
-              <button
-                onClick={() => setPublicFilter(prev => ({ ...prev, mode: "whitelist" }))}
-                className={`text-left p-3 rounded-xl border-2 transition-colors ${
-                  publicFilter.mode === "whitelist" ? "border-blue-600 bg-blue-50" : "border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                <p className="text-xs font-semibold text-gray-900">Mostrar solo lo asignado (lista blanca)</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Cada {groupLabelLower} ve solo sus clientes. Se desactiva la vista abierta.
-                </p>
-              </button>
+          <div className="space-y-5">
+            {/* 1) Lista negra: ocultar a todos */}
+            <div>
+              <p className="text-xs font-semibold text-gray-700 mb-1">Ocultar a todos</p>
+              <p className="text-xs text-gray-400 mb-2">
+                Cobros que no ve ningún empleado (lo personal, lo que no es venta). Se ocultan
+                incluso a los que ven todo.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newTerm}
+                  onChange={(e) => setNewTerm(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addFilterTerm(); } }}
+                  placeholder="Nombre o palabra a ocultar (ej: Mamá, Proveedor SA)"
+                  className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button onClick={addFilterTerm} className="px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors flex-shrink-0">
+                  Agregar
+                </button>
+              </div>
+              {publicFilter.blacklist.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {publicFilter.blacklist.map((term) => (
+                    <span key={term} className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1 bg-gray-100 rounded-full text-sm text-gray-700">
+                      {term}
+                      <button onClick={() => removeFilterTerm(term)} className="text-gray-400 hover:text-red-500">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* MODO LISTA NEGRA */}
-            {publicFilter.mode === "blacklist" && (
-              <div className="space-y-3">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newTerm}
-                    onChange={(e) => setNewTerm(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addFilterTerm(); } }}
-                    placeholder="Nombre o palabra a ocultar (ej: Mamá, Proveedor SA)"
-                    className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <button onClick={addFilterTerm} className="px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors flex-shrink-0">
-                    Agregar
-                  </button>
+            {/* 2) Visibilidad por grupo */}
+            <div className="border-t border-gray-100 pt-4">
+              <p className="text-xs font-semibold text-gray-700 mb-1">Qué ve cada {groupLabelLower}</p>
+              {!(branchConfig.enabled && authMode === "perGroup") ? (
+                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl mt-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-800">
+                    Para restringir por {groupLabelLower} activá, más arriba, el modo por {groupLabelLower} con
+                    <strong> una contraseña por {groupLabelLower}</strong>. Sin eso, todos ven todo (salvo la lista de arriba).
+                  </p>
                 </div>
-                {publicFilter.blacklist.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {publicFilter.blacklist.map((term) => (
-                      <span key={term} className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1 bg-gray-100 rounded-full text-sm text-gray-700">
-                        {term}
-                        <button onClick={() => removeFilterTerm(term)} className="text-gray-400 hover:text-red-500">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400">Todavía no agregaste ninguna palabra. Se muestra todo.</p>
-                )}
-              </div>
-            )}
-
-            {/* MODO LISTA BLANCA */}
-            {publicFilter.mode === "whitelist" && (
-              <div className="space-y-3">
-                {!(branchConfig.enabled && authMode === "perGroup") ? (
-                  <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-800">
-                      Para usar la lista blanca primero activá, más arriba, el modo por {groupLabelLower} con
-                      <strong> una contraseña por {groupLabelLower}</strong>. Cada uno entra con la suya y ve solo lo que le asignes.
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-xs text-gray-500">
-                      Asigná a cada {groupLabelLower} los nombres de sus clientes. Solo va a ver los cobros que
-                      coincidan. Los cobros de clientes que no estén en ninguna lista no los ve ningún empleado
-                      (vos sí, acá).
-                    </p>
+              ) : (
+                <>
+                  <p className="text-xs text-gray-400 mb-3">
+                    &ldquo;Ve todo&rdquo; para la caja o el encargado; &ldquo;Solo sus clientes&rdquo; para cada vendedor.
+                    Si al menos uno ve solo lo suyo, la vista pública deja de estar abierta (solo con contraseña).
+                  </p>
+                  <div className="space-y-2">
                     {branchConfig.branches.map((b) => {
-                      const terms = publicFilter.whitelists?.[b.id] ?? [];
+                      const g = publicFilter.groups?.[b.id];
+                      const restricted = g?.visibility === "restricted";
+                      const terms = g?.whitelist ?? [];
                       return (
                         <div key={b.id} className="border border-gray-200 rounded-xl p-3">
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: b.color }} />
-                            <span className="text-sm font-medium text-gray-800">{b.name || "(sin nombre)"}</span>
-                          </div>
-                          <div className="flex gap-2 mb-2">
-                            <input
-                              type="text"
-                              value={wlInput[b.id] ?? ""}
-                              onChange={(e) => setWlInput(prev => ({ ...prev, [b.id]: e.target.value }))}
-                              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addWhitelistTerm(b.id); } }}
-                              placeholder="Nombre de un cliente"
-                              className="flex-1 min-w-0 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                            <button onClick={() => addWhitelistTerm(b.id)} className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors flex-shrink-0">
-                              Agregar
-                            </button>
-                          </div>
-                          {terms.length > 0 ? (
-                            <div className="flex flex-wrap gap-1.5">
-                              {terms.map((term) => (
-                                <span key={term} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-0.5 bg-gray-100 rounded-full text-xs text-gray-700">
-                                  {term}
-                                  <button onClick={() => removeWhitelistTerm(b.id, term)} className="text-gray-400 hover:text-red-500">
-                                    <Trash2 className="w-3 h-3" />
-                                  </button>
-                                </span>
-                              ))}
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: b.color }} />
+                              <span className="text-sm font-medium text-gray-800 truncate">{b.name || "(sin nombre)"}</span>
                             </div>
-                          ) : (
-                            <p className="text-xs text-gray-400">Sin clientes asignados: este {groupLabelLower} no verá ningún cobro.</p>
+                            <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5 flex-shrink-0">
+                              <button
+                                onClick={() => setGroupVisibility(b.id, "full")}
+                                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${!restricted ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}
+                              >
+                                Ve todo
+                              </button>
+                              <button
+                                onClick={() => setGroupVisibility(b.id, "restricted")}
+                                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${restricted ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}
+                              >
+                                Solo sus clientes
+                              </button>
+                            </div>
+                          </div>
+                          {restricted && (
+                            <>
+                              <div className="flex gap-2 mb-2">
+                                <input
+                                  type="text"
+                                  value={wlInput[b.id] ?? ""}
+                                  onChange={(e) => setWlInput(prev => ({ ...prev, [b.id]: e.target.value }))}
+                                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addWhitelistTerm(b.id); } }}
+                                  placeholder="Nombre de un cliente"
+                                  className="flex-1 min-w-0 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <button onClick={() => addWhitelistTerm(b.id)} className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors flex-shrink-0">
+                                  Agregar
+                                </button>
+                              </div>
+                              {terms.length > 0 ? (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {terms.map((term) => (
+                                    <span key={term} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-0.5 bg-gray-100 rounded-full text-xs text-gray-700">
+                                      {term}
+                                      <button onClick={() => removeWhitelistTerm(b.id, term)} className="text-gray-400 hover:text-red-500">
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-xs text-gray-400">Sin clientes: solo verá los de la lista general (abajo).</p>
+                              )}
+                            </>
                           )}
                         </div>
                       );
                     })}
-                  </>
-                )}
-              </div>
-            )}
+                  </div>
 
-            <div className="flex items-center gap-3 pt-1">
+                  {/* 3) Lista general (todos los restringidos la ven) */}
+                  {anyRestricted && (
+                    <div className="mt-4">
+                      <p className="text-xs font-semibold text-gray-700 mb-1">Clientes que ven todos</p>
+                      <p className="text-xs text-gray-400 mb-2">
+                        Clientes generales que ven todos los {groupLabelPluralLower} restringidos, además de los suyos.
+                      </p>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={sharedInput}
+                          onChange={(e) => setSharedInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSharedTerm(); } }}
+                          placeholder="Nombre de un cliente general"
+                          className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <button onClick={addSharedTerm} className="px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors flex-shrink-0">
+                          Agregar
+                        </button>
+                      </div>
+                      {(publicFilter.sharedWhitelist ?? []).length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {(publicFilter.sharedWhitelist ?? []).map((term) => (
+                            <span key={term} className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1 bg-gray-100 rounded-full text-sm text-gray-700">
+                              {term}
+                              <button onClick={() => removeSharedTerm(term)} className="text-gray-400 hover:text-red-500">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 pt-1 border-t border-gray-100">
               <button
                 onClick={() => savePublicFilter(publicFilter)}
                 disabled={savingFilter}

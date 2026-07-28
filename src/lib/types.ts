@@ -15,19 +15,29 @@ export interface User {
  * Filtro de visibilidad de la vista pública (lo que ven los empleados).
  * No afecta el panel del dueño, que siempre ve todo.
  *
- * - "blacklist": se ocultan los cobros cuyo texto contenga alguno de los términos.
- *   La vista pública sigue abierta.
- * - "whitelist": la vista pública abierta se desactiva (solo entra quien tiene
- *   contraseña de su grupo) y cada vendedor ve SOLO los cobros que coinciden con
- *   su propia lista. Requiere el modo por vendedor con contraseña propia.
+ * Dos cosas independientes:
+ * - `blacklist`: términos que se ocultan a TODOS los empleados (lo personal /
+ *   no-ventas). Siempre aplica, incluso a los grupos que "ven todo".
+ * - `groups`: cómo ve cada grupo. "full" = ve todo lo no oculto (ej: la caja);
+ *   "restricted" = ve solo los clientes de su lista (+ la lista general).
+ * - `sharedWhitelist`: clientes que TODOS los grupos restringidos pueden ver,
+ *   además de los suyos.
+ *
+ * Si algún grupo es "restricted", la vista pública abierta se desactiva: solo
+ * entra quien tiene contraseña de su grupo.
  */
+export interface GroupVisibility {
+  visibility: "full" | "restricted";
+  /** Clientes propios del grupo. Solo se usa si visibility === "restricted". */
+  whitelist?: string[];
+}
+
 export interface PublicFilter {
   enabled: boolean;
-  mode: "blacklist" | "whitelist";
-  /** Términos a ocultar. Solo se usa en modo "blacklist". */
   blacklist: string[];
-  /** branchId → términos que ese vendedor tiene permitido ver. Solo modo "whitelist". */
-  whitelists?: Record<string, string[]>;
+  sharedWhitelist?: string[];
+  /** branchId → configuración de visibilidad. Si un grupo falta, se asume "full". */
+  groups?: Record<string, GroupVisibility>;
 }
 
 export interface Device {
