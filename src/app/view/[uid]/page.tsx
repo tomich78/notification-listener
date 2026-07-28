@@ -3,9 +3,10 @@
 import { use, useEffect, useState, useMemo } from "react";
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc, limit, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Notification, BranchConfig } from "@/lib/types";
+import { Notification, BranchConfig, PublicFilter } from "@/lib/types";
 import { formatCurrency, formatDateShort } from "@/lib/utils";
 import { branchLabelLower, branchLabelPluralLower } from "@/lib/branchLabel";
+import { visibleForPublic } from "@/lib/visibilityFilter";
 import { Bell, Globe, Smartphone, Search, Calendar, Lock, ChevronDown, RefreshCw, FileDown, Clock, Eye, EyeOff, X } from "lucide-react";
 import Image from "next/image";
 import ReportModal from "@/components/ReportModal";
@@ -44,6 +45,7 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
 
   const [ownerIsPro, setOwnerIsPro] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const [publicFilter, setPublicFilter] = useState<PublicFilter | null>(null);
 
   // Branch state
   const [branchConfig, setBranchConfig] = useState<BranchConfig | null>(null);
@@ -67,6 +69,9 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
       const data = snap.data();
       if (data.branchConfig?.enabled) {
         setBranchConfig(data.branchConfig as BranchConfig);
+      }
+      if (data.publicFilter?.enabled) {
+        setPublicFilter(data.publicFilter as PublicFilter);
       }
       const expiresAt = data.planExpiresAt?.toDate?.();
       const isPro = data.plan === "pro" && (!expiresAt || expiresAt > new Date());
@@ -175,13 +180,20 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
     }
   }
 
+  // Cobros visibles para los empleados: se quitan los ocultos por el filtro del
+  // dueño ANTES de cualquier cálculo, así ni la lista ni los totales los cuentan.
+  const visibleNotifs = useMemo(
+    () => visibleForPublic(rangeNotifs, publicFilter),
+    [rangeNotifs, publicFilter]
+  );
+
   const uniqueDevices = useMemo(() => {
     const names = new Set<string>();
-    for (const n of rangeNotifs) {
+    for (const n of visibleNotifs) {
       if (n.deviceName) names.add(n.deviceName);
     }
     return Array.from(names).sort();
-  }, [rangeNotifs]);
+  }, [visibleNotifs]);
 
   const hourOf = (n: Notification): number | null => {
     const d = n.timestamp instanceof Date ? n.timestamp : n.timestamp?.toDate?.();
@@ -189,7 +201,7 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
   };
 
   const filtered = useMemo(() => {
-    let base = rangeNotifs;
+    let base = visibleNotifs;
     // Filtro por hora del día (para turnos). Rango inclusivo hora-a-hora:
     // "de 14 a 22" incluye todo lo ocurrido entre las 14:00 y las 22:59.
     const hf = hourFrom === "" ? null : parseInt(hourFrom, 10);
@@ -211,7 +223,7 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
       n.app.toLowerCase().includes(q) ||
       (n.deviceName ?? "").toLowerCase().includes(q)
     );
-  }, [rangeNotifs, search, deviceFilter, hourFrom, hourTo]);
+  }, [visibleNotifs, search, deviceFilter, hourFrom, hourTo]);
 
   // Totales calculados sobre lo filtrado — siempre consistentes con la lista.
   const sumAmount = (list: Notification[]) => list.reduce((acc, n) => acc + (n.amount ?? 0), 0);
@@ -660,7 +672,7 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
 
       {/* Modal reporte PDF */}
       {showReport && (
-        <ReportModal userId={uid} onClose={() => setShowReport(false)} />
+        <ReportModal userId={uid} onClose={() => setShowReport(false)} publicFilter={publicFilter} />
       )}
     </div>
   );

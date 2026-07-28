@@ -24,10 +24,11 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
-import { Notification, BranchConfig } from "@/lib/types";
+import { Notification, BranchConfig, PublicFilter } from "@/lib/types";
 import { formatCurrency, formatDateShort, extractAmount, checkPlanExpiry } from "@/lib/utils";
 import { branchLabel } from "@/lib/branchLabel";
-import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar, AlertTriangle, FileDown, RefreshCw, Clock } from "lucide-react";
+import { isHiddenFromPublic } from "@/lib/visibilityFilter";
+import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar, AlertTriangle, FileDown, RefreshCw, Clock, EyeOff } from "lucide-react";
 import OnboardingWizard from "@/components/OnboardingWizard";
 import ReportModal from "@/components/ReportModal";
 
@@ -85,6 +86,7 @@ export default function DashboardPage() {
   const [historicCount, setHistoricCount] = useState(0);
   const [monthCount, setMonthCount] = useState(0);
   const [branchConfig, setBranchConfig] = useState<BranchConfig | null>(null);
+  const [publicFilter, setPublicFilter] = useState<PublicFilter | null>(null);
   const [userPlan, setUserPlan] = useState<"free" | "pro">("free");
   const [notifLimit, setNotifLimit] = useState<number>(100);
   const [showWizard, setShowWizard] = useState(false);
@@ -140,6 +142,7 @@ export default function DashboardPage() {
     getDoc(doc(db, "users", user.uid)).then(async (snap) => {
       const data = snap.data();
       if (data?.branchConfig?.enabled) setBranchConfig(data.branchConfig as BranchConfig);
+      if (data?.publicFilter?.enabled) setPublicFilter(data.publicFilter as PublicFilter);
       setUserPlan(await checkPlanExpiry(db, user.uid, data ?? {}));
     });
     getDoc(doc(db, "config", "plans")).then((snap) => {
@@ -717,7 +720,15 @@ export default function DashboardPage() {
                     </td>
                     <td className="hidden md:table-cell px-6 py-3 text-gray-600">{n.app}</td>
                     <td className="hidden lg:table-cell px-6 py-3 text-gray-600 whitespace-nowrap">{n.deviceName ?? "—"}</td>
-                    <td className="px-3 md:px-6 py-3 text-gray-700 max-w-[200px] md:max-w-sm break-words">{n.text}</td>
+                    <td className="px-3 md:px-6 py-3 text-gray-700 max-w-[200px] md:max-w-sm break-words">
+                      {n.text}
+                      {isHiddenFromPublic(n.text, publicFilter) && (
+                        <span className="ml-1.5 inline-flex items-center gap-1 align-middle px-1.5 py-0.5 bg-gray-100 text-gray-500 text-[10px] font-medium rounded whitespace-nowrap">
+                          <EyeOff className="w-2.5 h-2.5" />
+                          oculto
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 md:px-6 py-3 text-right font-medium text-gray-900 whitespace-nowrap">
                       {n.amount !== null ? formatCurrency(n.amount) : "—"}
                     </td>

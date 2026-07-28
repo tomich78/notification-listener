@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
-import { Copy, Check, ExternalLink, Share2, Smartphone, Globe, Zap, Crown, GitBranch, Plus, Trash2, AlertTriangle } from "lucide-react";
+import { Copy, Check, ExternalLink, Share2, Smartphone, Globe, Zap, Crown, GitBranch, Plus, Trash2, AlertTriangle, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { deleteUser } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { BranchConfig } from "@/lib/types";
+import { BranchConfig, PublicFilter } from "@/lib/types";
 import { checkPlanExpiry } from "@/lib/utils";
 import {
   branchLabel,
@@ -74,6 +74,16 @@ export default function SettingsPage() {
   const [savedBranch, setSavedBranch] = useState(false);
   const [branchError, setBranchError] = useState("");
 
+  // Filtro de visibilidad (ocultar cobros a los empleados)
+  const [publicFilter, setPublicFilter] = useState<PublicFilter>({
+    enabled: false,
+    mode: "blacklist",
+    blacklist: [],
+  });
+  const [newTerm, setNewTerm] = useState("");
+  const [savingFilter, setSavingFilter] = useState(false);
+  const [savedFilter, setSavedFilter] = useState(false);
+
   const groupLabel = branchLabel(branchConfig.label);
   const groupLabelLower = branchLabelLower(branchConfig.label);
   const groupLabelPlural = branchLabelPlural(branchConfig.label);
@@ -98,6 +108,14 @@ export default function SettingsPage() {
             label: DEFAULT_BRANCH_LABEL,
             authMode: "shared",
             ...data.branchConfig,
+          });
+        }
+        if (data.publicFilter) {
+          setPublicFilter({
+            enabled: false,
+            mode: "blacklist",
+            blacklist: [],
+            ...data.publicFilter,
           });
         }
       }
@@ -169,6 +187,35 @@ export default function SettingsPage() {
       setBranchError("Error de conexión. Intentá de nuevo.");
     } finally {
       setSavingBranch(false);
+    }
+  }
+
+  function addFilterTerm() {
+    const t = newTerm.trim();
+    if (!t) return;
+    if (publicFilter.blacklist.some(x => x.toLowerCase() === t.toLowerCase())) {
+      setNewTerm("");
+      return;
+    }
+    setPublicFilter(prev => ({ ...prev, blacklist: [...prev.blacklist, t] }));
+    setNewTerm("");
+  }
+
+  function removeFilterTerm(term: string) {
+    setPublicFilter(prev => ({ ...prev, blacklist: prev.blacklist.filter(t => t !== term) }));
+  }
+
+  async function savePublicFilter(next: PublicFilter) {
+    if (!user) return;
+    setSavingFilter(true);
+    try {
+      await updateDoc(doc(db, "users", user.uid), { publicFilter: next });
+      setSavedFilter(true);
+      setTimeout(() => setSavedFilter(false), 2000);
+    } catch (e) {
+      console.error("Error guardando el filtro de visibilidad:", e);
+    } finally {
+      setSavingFilter(false);
     }
   }
 
@@ -649,6 +696,85 @@ export default function SettingsPage() {
           >
             {savingBranch ? "Guardando..." : "Guardar (desactivado)"}
           </button>
+        )}
+      </section>
+
+      {/* Ocultar cobros a los empleados */}
+      <section className="bg-white rounded-2xl border border-gray-200 p-5 mb-5">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <EyeOff className="w-4 h-4 text-blue-600" />
+            <h2 className="font-semibold text-sm text-gray-900">Ocultar cobros a los empleados</h2>
+          </div>
+          <button
+            onClick={() => {
+              const next = { ...publicFilter, enabled: !publicFilter.enabled };
+              setPublicFilter(next);
+              savePublicFilter(next);
+            }}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+              publicFilter.enabled ? "bg-blue-600" : "bg-gray-200"
+            }`}
+          >
+            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+              publicFilter.enabled ? "translate-x-4" : "translate-x-1"
+            }`} />
+          </button>
+        </div>
+        <p className="text-xs text-gray-400 mb-4">
+          Los cobros cuyo texto contenga alguna de estas palabras o nombres no van a
+          aparecer en la vista pública de los empleados. Vos los seguís viendo acá.
+        </p>
+
+        {publicFilter.enabled && (
+          <div className="space-y-3">
+            {/* Agregar término */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newTerm}
+                onChange={(e) => setNewTerm(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addFilterTerm(); } }}
+                placeholder="Nombre o palabra a ocultar (ej: Mamá, Proveedor SA)"
+                className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                onClick={addFilterTerm}
+                className="px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors flex-shrink-0"
+              >
+                Agregar
+              </button>
+            </div>
+
+            {/* Lista de términos */}
+            {publicFilter.blacklist.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {publicFilter.blacklist.map((term) => (
+                  <span key={term} className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1 bg-gray-100 rounded-full text-sm text-gray-700">
+                    {term}
+                    <button onClick={() => removeFilterTerm(term)} className="text-gray-400 hover:text-red-500">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">Todavía no agregaste ninguna palabra. Se muestra todo.</p>
+            )}
+
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                onClick={() => savePublicFilter(publicFilter)}
+                disabled={savingFilter}
+                className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {savingFilter ? "Guardando..." : savedFilter ? "¡Guardado!" : "Guardar lista"}
+              </button>
+              <p className="text-[11px] text-gray-400">
+                Tip: probá con una parte del nombre tal como aparece en la notificación del banco.
+              </p>
+            </div>
+          </div>
         )}
       </section>
 

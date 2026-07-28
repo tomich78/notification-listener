@@ -8,6 +8,21 @@ export interface User {
   planExpiresAt?: Timestamp | null;
   createdAt: Timestamp;
   publicViewEnabled: boolean;
+  publicFilter?: PublicFilter;
+}
+
+/**
+ * Filtro de visibilidad de la vista pública (lo que ven los empleados).
+ * No afecta el panel del dueño, que siempre ve todo.
+ *
+ * - "blacklist": se ocultan los cobros cuyo texto contenga alguno de los términos.
+ *   La vista pública sigue abierta.
+ */
+export interface PublicFilter {
+  enabled: boolean;
+  mode: "blacklist";
+  /** Términos (nombres, palabras) a ocultar. Match por texto, sin distinguir mayúsculas. */
+  blacklist: string[];
 }
 
 export interface Device {

@@ -4,20 +4,24 @@ import { useState, useEffect } from "react";
 import { collection, query, where, orderBy, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { branchLabel, branchLabelPlural, branchLabelPluralLower } from "@/lib/branchLabel";
-import { Notification, Device, BranchConfig } from "@/lib/types";
+import { Notification, Device, BranchConfig, PublicFilter } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
+import { visibleForPublic } from "@/lib/visibilityFilter";
 import { X, FileDown, Loader2 } from "lucide-react";
 
 interface Props {
   userId: string;
   onClose: () => void;
+  // Cuando el PDF se genera desde la vista pública (cajero), se pasa el filtro
+  // para excluir los cobros ocultos. Desde el panel del dueño no se pasa: ve todo.
+  publicFilter?: PublicFilter | null;
 }
 
 function toLocalDateString(date: Date) {
   return date.toLocaleDateString("en-CA");
 }
 
-export default function ReportModal({ userId, onClose }: Props) {
+export default function ReportModal({ userId, onClose, publicFilter }: Props) {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set());
   const [branchConfig, setBranchConfig] = useState<BranchConfig | null>(null);
@@ -83,6 +87,9 @@ export default function ReportModal({ userId, onClose }: Props) {
       ));
 
       let notifications = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Notification[];
+
+      // Si el PDF se genera desde la vista pública, ocultar los cobros filtrados
+      notifications = visibleForPublic(notifications, publicFilter);
 
       // Filtrar por horario (turnos) del lado del cliente
       const hf = hourFrom === "" ? null : parseInt(hourFrom, 10);
