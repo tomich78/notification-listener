@@ -27,7 +27,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Notification, BranchConfig, PublicFilter } from "@/lib/types";
 import { formatCurrency, formatDateShort, extractAmount, checkPlanExpiry } from "@/lib/utils";
 import { branchLabel } from "@/lib/branchLabel";
-import { isHiddenFromPublic } from "@/lib/visibilityFilter";
+import { isHiddenForEveryone } from "@/lib/visibilityFilter";
 import { TrendingUp, Bell, Smartphone, Globe, Plus, Pencil, Trash2, X, Search, Calendar, AlertTriangle, FileDown, RefreshCw, Clock, EyeOff } from "lucide-react";
 import OnboardingWizard from "@/components/OnboardingWizard";
 import ReportModal from "@/components/ReportModal";
@@ -722,7 +722,7 @@ export default function DashboardPage() {
                     <td className="hidden lg:table-cell px-6 py-3 text-gray-600 whitespace-nowrap">{n.deviceName ?? "—"}</td>
                     <td className="px-3 md:px-6 py-3 text-gray-700 max-w-[200px] md:max-w-sm break-words">
                       {n.text}
-                      {isHiddenFromPublic(n.text, publicFilter) && (
+                      {isHiddenForEveryone(n.text, publicFilter) && (
                         <span className="ml-1.5 inline-flex items-center gap-1 align-middle px-1.5 py-0.5 bg-gray-100 text-gray-500 text-[10px] font-medium rounded whitespace-nowrap">
                           <EyeOff className="w-2.5 h-2.5" />
                           oculto

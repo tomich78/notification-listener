@@ -6,7 +6,7 @@ import { db } from "@/lib/firebase";
 import { Notification, BranchConfig, PublicFilter } from "@/lib/types";
 import { formatCurrency, formatDateShort } from "@/lib/utils";
 import { branchLabelLower, branchLabelPluralLower } from "@/lib/branchLabel";
-import { visibleForPublic } from "@/lib/visibilityFilter";
+import { visibleForViewer } from "@/lib/visibilityFilter";
 import { Bell, Globe, Smartphone, Search, Calendar, Lock, ChevronDown, RefreshCw, FileDown, Clock, Eye, EyeOff, X } from "lucide-react";
 import Image from "next/image";
 import ReportModal from "@/components/ReportModal";
@@ -180,11 +180,16 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
     }
   }
 
-  // Cobros visibles para los empleados: se quitan los ocultos por el filtro del
-  // dueño ANTES de cualquier cálculo, así ni la lista ni los totales los cuentan.
+  // Cobros visibles para quien está mirando, ANTES de cualquier cálculo, así ni
+  // la lista ni los totales cuentan los ocultos. Depende del alcance:
+  // - blacklist: se ocultan los de la lista negra (para todos).
+  // - whitelist: cada vendedor ve solo los de su lista; el encargado (scope all) ve todo.
+  const branchForFilter = typeof activeBranch === "string" &&
+    activeBranch !== "__selecting__" && activeBranch !== "__readonly__"
+      ? activeBranch : null;
   const visibleNotifs = useMemo(
-    () => visibleForPublic(rangeNotifs, publicFilter),
-    [rangeNotifs, publicFilter]
+    () => visibleForViewer(rangeNotifs, publicFilter, authScope, branchForFilter),
+    [rangeNotifs, publicFilter, authScope, branchForFilter]
   );
 
   const uniqueDevices = useMemo(() => {
@@ -286,14 +291,17 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
               {checkingPassword ? "Verificando..." : "Entrar"}
             </button>
           </form>
-          <div className="mt-4 pt-4 border-t border-gray-100 text-center">
-            <button
-              onClick={enterReadOnly}
-              className="text-sm text-gray-400 hover:text-gray-600 hover:underline"
-            >
-              Solo ver, sin marcar →
-            </button>
-          </div>
+          {/* En modo lista blanca no hay vista abierta: solo entra quien tiene contraseña. */}
+          {publicFilter?.mode !== "whitelist" && (
+            <div className="mt-4 pt-4 border-t border-gray-100 text-center">
+              <button
+                onClick={enterReadOnly}
+                className="text-sm text-gray-400 hover:text-gray-600 hover:underline"
+              >
+                Solo ver, sin marcar →
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -323,6 +331,20 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
     );
   }
 
+  // Fail-closed: la lista blanca depende de saber qué vendedor mira. Si está
+  // activa pero el modo por vendedor no está configurado, no mostramos nada
+  // en vez de mostrar todo por error.
+  if (publicFilter?.enabled && publicFilter.mode === "whitelist" && !branchConfig?.enabled) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-2xl border border-gray-200 p-8 w-full max-w-sm text-center shadow-sm">
+          <Lock className="w-6 h-6 text-gray-400 mx-auto mb-3" />
+          <p className="text-sm text-gray-600">Esta vista no está disponible por ahora.</p>
+        </div>
+      </div>
+    );
+  }
+
   const currentBranch = branchConfig?.branches.find(b => b.id === activeBranch);
 
   return (
@@ -337,7 +359,10 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {branchConfig?.enabled && ownerIsPro && (
+            {/* En modo lista blanca el PDF solo lo genera el encargado (contraseña
+                maestra), no cada vendedor, para no exponer los cobros de los demás. */}
+            {branchConfig?.enabled && ownerIsPro &&
+              !(publicFilter?.mode === "whitelist" && authScope !== "all") && (
               <button
                 onClick={() => setShowReport(true)}
                 className="flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors"

@@ -17,12 +17,17 @@ export interface User {
  *
  * - "blacklist": se ocultan los cobros cuyo texto contenga alguno de los términos.
  *   La vista pública sigue abierta.
+ * - "whitelist": la vista pública abierta se desactiva (solo entra quien tiene
+ *   contraseña de su grupo) y cada vendedor ve SOLO los cobros que coinciden con
+ *   su propia lista. Requiere el modo por vendedor con contraseña propia.
  */
 export interface PublicFilter {
   enabled: boolean;
-  mode: "blacklist";
-  /** Términos (nombres, palabras) a ocultar. Match por texto, sin distinguir mayúsculas. */
+  mode: "blacklist" | "whitelist";
+  /** Términos a ocultar. Solo se usa en modo "blacklist". */
   blacklist: string[];
+  /** branchId → términos que ese vendedor tiene permitido ver. Solo modo "whitelist". */
+  whitelists?: Record<string, string[]>;
 }
 
 export interface Device {

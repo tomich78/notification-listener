@@ -79,8 +79,10 @@ export default function SettingsPage() {
     enabled: false,
     mode: "blacklist",
     blacklist: [],
+    whitelists: {},
   });
   const [newTerm, setNewTerm] = useState("");
+  const [wlInput, setWlInput] = useState<Record<string, string>>({});
   const [savingFilter, setSavingFilter] = useState(false);
   const [savedFilter, setSavedFilter] = useState(false);
 
@@ -115,6 +117,7 @@ export default function SettingsPage() {
             enabled: false,
             mode: "blacklist",
             blacklist: [],
+            whitelists: {},
             ...data.publicFilter,
           });
         }
@@ -203,6 +206,27 @@ export default function SettingsPage() {
 
   function removeFilterTerm(term: string) {
     setPublicFilter(prev => ({ ...prev, blacklist: prev.blacklist.filter(t => t !== term) }));
+  }
+
+  function addWhitelistTerm(branchId: string) {
+    const t = (wlInput[branchId] ?? "").trim();
+    if (!t) return;
+    setPublicFilter(prev => {
+      const current = prev.whitelists?.[branchId] ?? [];
+      if (current.some(x => x.toLowerCase() === t.toLowerCase())) return prev;
+      return { ...prev, whitelists: { ...prev.whitelists, [branchId]: [...current, t] } };
+    });
+    setWlInput(prev => ({ ...prev, [branchId]: "" }));
+  }
+
+  function removeWhitelistTerm(branchId: string, term: string) {
+    setPublicFilter(prev => ({
+      ...prev,
+      whitelists: {
+        ...prev.whitelists,
+        [branchId]: (prev.whitelists?.[branchId] ?? []).filter(t => t !== term),
+      },
+    }));
   }
 
   async function savePublicFilter(next: PublicFilter) {
@@ -722,44 +746,129 @@ export default function SettingsPage() {
           </button>
         </div>
         <p className="text-xs text-gray-400 mb-4">
-          Los cobros cuyo texto contenga alguna de estas palabras o nombres no van a
-          aparecer en la vista pública de los empleados. Vos los seguís viendo acá.
+          Controlá qué cobros ven los empleados en la vista pública. Vos seguís viendo todo acá.
         </p>
 
         {publicFilter.enabled && (
-          <div className="space-y-3">
-            {/* Agregar término */}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newTerm}
-                onChange={(e) => setNewTerm(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addFilterTerm(); } }}
-                placeholder="Nombre o palabra a ocultar (ej: Mamá, Proveedor SA)"
-                className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+          <div className="space-y-4">
+            {/* Selector de modo */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
-                onClick={addFilterTerm}
-                className="px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors flex-shrink-0"
+                onClick={() => setPublicFilter(prev => ({ ...prev, mode: "blacklist" }))}
+                className={`text-left p-3 rounded-xl border-2 transition-colors ${
+                  publicFilter.mode === "blacklist" ? "border-blue-600 bg-blue-50" : "border-gray-200 hover:border-gray-300"
+                }`}
               >
-                Agregar
+                <p className="text-xs font-semibold text-gray-900">Ocultar algunos (lista negra)</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Se ve todo salvo lo que agregues. La vista pública sigue abierta.
+                </p>
+              </button>
+              <button
+                onClick={() => setPublicFilter(prev => ({ ...prev, mode: "whitelist" }))}
+                className={`text-left p-3 rounded-xl border-2 transition-colors ${
+                  publicFilter.mode === "whitelist" ? "border-blue-600 bg-blue-50" : "border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                <p className="text-xs font-semibold text-gray-900">Mostrar solo lo asignado (lista blanca)</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Cada {groupLabelLower} ve solo sus clientes. Se desactiva la vista abierta.
+                </p>
               </button>
             </div>
 
-            {/* Lista de términos */}
-            {publicFilter.blacklist.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {publicFilter.blacklist.map((term) => (
-                  <span key={term} className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1 bg-gray-100 rounded-full text-sm text-gray-700">
-                    {term}
-                    <button onClick={() => removeFilterTerm(term)} className="text-gray-400 hover:text-red-500">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </span>
-                ))}
+            {/* MODO LISTA NEGRA */}
+            {publicFilter.mode === "blacklist" && (
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newTerm}
+                    onChange={(e) => setNewTerm(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addFilterTerm(); } }}
+                    placeholder="Nombre o palabra a ocultar (ej: Mamá, Proveedor SA)"
+                    className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button onClick={addFilterTerm} className="px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors flex-shrink-0">
+                    Agregar
+                  </button>
+                </div>
+                {publicFilter.blacklist.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {publicFilter.blacklist.map((term) => (
+                      <span key={term} className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1 bg-gray-100 rounded-full text-sm text-gray-700">
+                        {term}
+                        <button onClick={() => removeFilterTerm(term)} className="text-gray-400 hover:text-red-500">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400">Todavía no agregaste ninguna palabra. Se muestra todo.</p>
+                )}
               </div>
-            ) : (
-              <p className="text-xs text-gray-400">Todavía no agregaste ninguna palabra. Se muestra todo.</p>
+            )}
+
+            {/* MODO LISTA BLANCA */}
+            {publicFilter.mode === "whitelist" && (
+              <div className="space-y-3">
+                {!(branchConfig.enabled && authMode === "perGroup") ? (
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-800">
+                      Para usar la lista blanca primero activá, más arriba, el modo por {groupLabelLower} con
+                      <strong> una contraseña por {groupLabelLower}</strong>. Cada uno entra con la suya y ve solo lo que le asignes.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs text-gray-500">
+                      Asigná a cada {groupLabelLower} los nombres de sus clientes. Solo va a ver los cobros que
+                      coincidan. Los cobros de clientes que no estén en ninguna lista no los ve ningún empleado
+                      (vos sí, acá).
+                    </p>
+                    {branchConfig.branches.map((b) => {
+                      const terms = publicFilter.whitelists?.[b.id] ?? [];
+                      return (
+                        <div key={b.id} className="border border-gray-200 rounded-xl p-3">
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: b.color }} />
+                            <span className="text-sm font-medium text-gray-800">{b.name || "(sin nombre)"}</span>
+                          </div>
+                          <div className="flex gap-2 mb-2">
+                            <input
+                              type="text"
+                              value={wlInput[b.id] ?? ""}
+                              onChange={(e) => setWlInput(prev => ({ ...prev, [b.id]: e.target.value }))}
+                              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addWhitelistTerm(b.id); } }}
+                              placeholder="Nombre de un cliente"
+                              className="flex-1 min-w-0 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <button onClick={() => addWhitelistTerm(b.id)} className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors flex-shrink-0">
+                              Agregar
+                            </button>
+                          </div>
+                          {terms.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {terms.map((term) => (
+                                <span key={term} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-0.5 bg-gray-100 rounded-full text-xs text-gray-700">
+                                  {term}
+                                  <button onClick={() => removeWhitelistTerm(b.id, term)} className="text-gray-400 hover:text-red-500">
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-gray-400">Sin clientes asignados: este {groupLabelLower} no verá ningún cobro.</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
             )}
 
             <div className="flex items-center gap-3 pt-1">
@@ -768,10 +877,10 @@ export default function SettingsPage() {
                 disabled={savingFilter}
                 className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
-                {savingFilter ? "Guardando..." : savedFilter ? "¡Guardado!" : "Guardar lista"}
+                {savingFilter ? "Guardando..." : savedFilter ? "¡Guardado!" : "Guardar"}
               </button>
               <p className="text-[11px] text-gray-400">
-                Tip: probá con una parte del nombre tal como aparece en la notificación del banco.
+                Usá una parte del nombre tal como aparece en la notificación del banco.
               </p>
             </div>
           </div>
