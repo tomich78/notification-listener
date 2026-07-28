@@ -15,13 +15,16 @@ interface Props {
   // Cuando el PDF se genera desde la vista pública (cajero), se pasa el filtro
   // para excluir los cobros ocultos. Desde el panel del dueño no se pasa: ve todo.
   publicFilter?: PublicFilter | null;
+  // Cuando un vendedor logueado descarga su PDF, se bloquea a su propio grupo:
+  // el reporte incluye SOLO los cobros asignados a esa sucursal/vendedor.
+  lockedBranchId?: string | null;
 }
 
 function toLocalDateString(date: Date) {
   return date.toLocaleDateString("en-CA");
 }
 
-export default function ReportModal({ userId, onClose, publicFilter }: Props) {
+export default function ReportModal({ userId, onClose, publicFilter, lockedBranchId }: Props) {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set());
   const [branchConfig, setBranchConfig] = useState<BranchConfig | null>(null);
@@ -88,8 +91,15 @@ export default function ReportModal({ userId, onClose, publicFilter }: Props) {
 
       let notifications = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Notification[];
 
-      // Si el PDF se genera desde la vista pública, ocultar los cobros filtrados
-      notifications = visibleForPublic(notifications, publicFilter);
+      if (lockedBranchId) {
+        // Vendedor descargando su propio PDF: solo sus cobros asignados.
+        // El bloqueo por grupo es más estricto que el filtro de visibilidad, así
+        // que alcanza con esto.
+        notifications = notifications.filter(n => n.branchId === lockedBranchId);
+      } else {
+        // Si el PDF se genera desde la vista pública (encargado), ocultar filtrados
+        notifications = visibleForPublic(notifications, publicFilter);
+      }
 
       // Filtrar por horario (turnos) del lado del cliente
       const hf = hourFrom === "" ? null : parseInt(hourFrom, 10);
@@ -112,8 +122,8 @@ export default function ReportModal({ userId, onClose, publicFilter }: Props) {
         );
       }
 
-      // Filtrar por sucursales si el modo está activo
-      if (branchConfig?.enabled && branchConfig.branches.length > 0 && selectedBranches.size < branchConfig.branches.length) {
+      // Filtrar por grupos seleccionados (no aplica si el vendedor está bloqueado a su grupo)
+      if (!lockedBranchId && branchConfig?.enabled && branchConfig.branches.length > 0 && selectedBranches.size < branchConfig.branches.length) {
         notifications = notifications.filter(n =>
           n.branchId ? selectedBranches.has(n.branchId) : false
         );
@@ -170,7 +180,13 @@ export default function ReportModal({ userId, onClose, publicFilter }: Props) {
         doc.text(`Dispositivos: ${names}`, 14, subtitleY);
         subtitleY += 6;
       }
-      if (branchConfig?.enabled && branchConfig.branches.length > 0 && selectedBranches.size < branchConfig.branches.length) {
+      if (lockedBranchId && branchConfig) {
+        const b = branchConfig.branches.find(x => x.id === lockedBranchId);
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(100, 100, 100);
+        doc.text(`${branchLabel(branchConfig.label)}: ${b?.name ?? ""}`, 14, subtitleY);
+      } else if (branchConfig?.enabled && branchConfig.branches.length > 0 && selectedBranches.size < branchConfig.branches.length) {
         const names = branchConfig.branches.filter(b => selectedBranches.has(b.id)).map(b => b.name).join(", ");
         doc.setFontSize(9);
         doc.setFont("helvetica", "normal");
@@ -275,6 +291,19 @@ export default function ReportModal({ userId, onClose, publicFilter }: Props) {
         </div>
 
         <div className="space-y-4">
+          {lockedBranchId && branchConfig && (
+            <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+              <div
+                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                style={{ backgroundColor: branchConfig.branches.find(b => b.id === lockedBranchId)?.color ?? "#2563EB" }}
+              />
+              <p className="text-xs text-blue-800">
+                Reporte de <strong>{branchConfig.branches.find(b => b.id === lockedBranchId)?.name}</strong> —
+                incluye solo tus cobros asignados.
+              </p>
+            </div>
+          )}
+
           {/* Rango de fechas */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Período</label>
@@ -354,8 +383,8 @@ export default function ReportModal({ userId, onClose, publicFilter }: Props) {
             )}
           </div>
 
-          {/* Sucursales (solo si el modo está activo) */}
-          {branchConfig?.enabled && branchConfig.branches.length > 0 && (
+          {/* Grupos (solo si el modo está activo y el vendedor NO está bloqueado a uno) */}
+          {!lockedBranchId && branchConfig?.enabled && branchConfig.branches.length > 0 && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 {branchLabelPlural(branchConfig.label)} a incluir

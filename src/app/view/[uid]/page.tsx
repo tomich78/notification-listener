@@ -359,10 +359,9 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {/* En modo lista blanca el PDF solo lo genera el encargado (contraseña
-                maestra), no cada vendedor, para no exponer los cobros de los demás. */}
-            {branchConfig?.enabled && ownerIsPro &&
-              !(publicFilter?.mode === "whitelist" && authScope !== "all") && (
+            {/* Un vendedor logueado descarga su PDF acotado a lo suyo (lockedBranchId);
+                el encargado (scope all) descarga el completo. */}
+            {branchConfig?.enabled && ownerIsPro && (
               <button
                 onClick={() => setShowReport(true)}
                 className="flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors"
@@ -697,7 +696,12 @@ export default function PublicViewPage({ params }: { params: Promise<{ uid: stri
 
       {/* Modal reporte PDF */}
       {showReport && (
-        <ReportModal userId={uid} onClose={() => setShowReport(false)} publicFilter={publicFilter} />
+        <ReportModal
+          userId={uid}
+          onClose={() => setShowReport(false)}
+          publicFilter={publicFilter}
+          lockedBranchId={authScope === "group" ? branchForFilter : null}
+        />
       )}
     </div>
   );
