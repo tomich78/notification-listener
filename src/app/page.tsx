@@ -378,6 +378,7 @@ export default async function LandingPage() {
             <span className="font-medium text-gray-600">NListener</span>
           </div>
           <div className="flex items-center gap-6">
+            <Link href="/terms" className="hover:text-gray-600 transition-colors">Términos</Link>
             <Link href="/privacy" className="hover:text-gray-600 transition-colors">Privacidad</Link>
             <Link href="/login" className="hover:text-gray-600 transition-colors">Iniciar sesión</Link>
             <Link href="/register" className="hover:text-gray-600 transition-colors">Registrarse</Link>
