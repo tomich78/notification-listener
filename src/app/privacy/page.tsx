@@ -64,6 +64,15 @@ export default function PrivacyPage() {
         <li>Señales de actividad, para mostrarte si el dispositivo sigue conectado</li>
       </ul>
 
+      <p><strong>Diagnósticos de la aplicación de Android</strong></p>
+      <p>
+        La aplicación incluye <strong>Firebase Crashlytics</strong>, que recoge automáticamente
+        informes cuando la app se cierra de forma inesperada: el tipo de error, el lugar del código
+        donde ocurrió, el modelo del dispositivo, la versión de Android y un identificador de
+        instalación. Sirve para enterarnos de las fallas y corregirlas. No incluye el contenido de
+        tus notificaciones.
+      </p>
+
       <p><strong>De las notificaciones de cobro</strong></p>
       <p>
         Por cada notificación de las apps que vos elegís, se guarda:
@@ -115,8 +124,8 @@ export default function PrivacyPage() {
       </p>
       <ul>
         <li>
-          <strong>Google (Firebase)</strong> — autenticación, base de datos (Firestore) y
-          notificaciones push
+          <strong>Google (Firebase)</strong> — autenticación, base de datos (Firestore),
+          notificaciones push e informes de fallas (Crashlytics)
         </li>
         <li>
           <strong>Vercel</strong> — alojamiento del panel web
@@ -158,6 +167,10 @@ export default function PrivacyPage() {
         <li><strong>Wake lock</strong> — para seguir enviando con la pantalla apagada</li>
         <li><strong>Cámara</strong> — solo para escanear el código QR durante la configuración inicial</li>
       </ul>
+      <p>
+        El escaneo del QR se hace <strong>dentro del teléfono</strong>: la imagen de la cámara no
+        se envía a ningún servidor ni se guarda.
+      </p>
       <p>
         La aplicación lee únicamente las notificaciones de las apps que vos seleccionás. El resto
         no se procesa ni se envía.
