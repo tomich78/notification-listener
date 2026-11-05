@@ -236,6 +236,19 @@ export default function UpgradePage() {
               ? "Se cobra todos los meses automáticamente. Podés darte de baja desde Configuración en cualquier momento."
               : "Es un pago único: no se te va a cobrar nada de forma automática. Te avisamos por mail antes del vencimiento."}
           </p>
+          {/* El link a los términos tiene que estar acá, donde se acepta un
+              cobro, y no solo en el footer de la landing. */}
+          <p className="text-[11px] text-gray-400 text-center mt-2">
+            Al pagar aceptás los{" "}
+            <Link href="/terms" className="underline hover:text-gray-600 transition-colors">
+              Términos del Servicio
+            </Link>{" "}
+            y la{" "}
+            <Link href="/privacy" className="underline hover:text-gray-600 transition-colors">
+              política de privacidad
+            </Link>
+            .
+          </p>
         </div>
 
         {/* Free comparison */}
